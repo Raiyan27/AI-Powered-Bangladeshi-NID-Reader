@@ -1,1 +1,49 @@
+# Environment & Secrets
+.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# Node.js
+node_modules/
+.next/
+out/
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.log
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Agents
+.agents/
+
+# Uploaded images (never commit user data)
+uploads/
+temp/
+
 .agents
