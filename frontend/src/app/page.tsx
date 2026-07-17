@@ -29,6 +29,7 @@ export default function Home() {
   const [result, setResult] = useState<NIDData | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<ApiError | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const handleExtract = async () => {
     setError(null);
@@ -71,7 +72,7 @@ export default function Home() {
       } else {
         setError(data.error);
       }
-    } catch (err) {
+    } catch {
       setError({
         code: "NETWORK_ERROR",
         message:
@@ -85,45 +86,79 @@ export default function Home() {
   const handleCopyJson = () => {
     if (result) {
       navigator.clipboard.writeText(JSON.stringify(result, null, 2));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
+  const handleReset = () => {
+    setResult(null);
+    setWarnings([]);
+    setError(null);
+    setFrontFile(null);
+    setBackFile(null);
+  };
+
+  const canExtract = !loading && !!frontFile && !!backFile;
+
   return (
-    <main className="flex-1 flex items-start justify-center px-4 py-12">
-      <div className="w-full max-w-xl space-y-6">
+    <main className="flex-1 flex items-start justify-center px-4 py-10">
+      <div className="w-full max-w-2xl space-y-6">
         {/* Header */}
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">
+        <div className="text-center space-y-1">
+          <div className="inline-flex items-center gap-2 text-blue-600 text-sm font-medium mb-2">
+            <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
+            AI-Powered Document Extraction
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
             Bangladesh NID Extractor
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Upload front and back images of an NID card to extract information
+          <p className="text-gray-500 text-sm max-w-md mx-auto">
+            Upload both sides of your National ID card. Our AI pipeline
+            (OCR + Vision LLM) extracts and structures the information.
           </p>
         </div>
 
         {/* Upload Section */}
-        <div className="border border-gray-200 rounded-lg p-5 space-y-5">
+        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-700">
+              Upload NID Card Images
+            </h2>
+            {(frontFile || backFile) && (
+              <button
+                id="reset-button"
+                onClick={handleReset}
+                className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer transition-colors"
+              >
+                Reset all
+              </button>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FileUpload
               id="front-upload"
               label="Front Side"
               onFileSelect={setFrontFile}
+              initialFile={frontFile}
             />
             <FileUpload
               id="back-upload"
               label="Back Side"
               onFileSelect={setBackFile}
+              initialFile={backFile}
             />
           </div>
 
           <button
             id="extract-button"
             onClick={handleExtract}
-            disabled={loading || !frontFile || !backFile}
-            className={`w-full py-2.5 px-4 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-              loading || !frontFile || !backFile
-                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                : "bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800"
+            disabled={!canExtract}
+            className={`w-full py-3 px-4 rounded-lg text-sm font-medium transition-all duration-150 ${
+              canExtract
+                ? "bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 cursor-pointer shadow-sm"
+                : "bg-gray-100 text-gray-400 cursor-not-allowed"
             }`}
           >
             {loading ? (
@@ -147,7 +182,7 @@ export default function Home() {
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                   />
                 </svg>
-                Extracting...
+                Extracting information…
               </span>
             ) : (
               "Extract Information"
@@ -155,13 +190,58 @@ export default function Home() {
           </button>
         </div>
 
+        {/* How it works */}
+        {!result && !error && !loading && (
+          <div className="border border-gray-100 rounded-xl p-5 bg-gray-50">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+              How it works
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                {
+                  step: "1",
+                  title: "Image Preprocessing",
+                  desc: "OpenCV deskews, denoises, and enhances contrast",
+                },
+                {
+                  step: "2",
+                  title: "OCR Extraction",
+                  desc: "PaddleOCR detects text with confidence scores",
+                },
+                {
+                  step: "3",
+                  title: "Vision AI",
+                  desc: "LLM semantically understands Bengali + English text",
+                },
+              ].map(({ step, title, desc }) => (
+                <div key={step} className="space-y-1">
+                  <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs font-bold flex items-center justify-center">
+                    {step}
+                  </div>
+                  <p className="text-xs font-medium text-gray-700">{title}</p>
+                  <p className="text-xs text-gray-500">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Error / Warnings */}
         <ErrorDisplay error={error} warnings={warnings} />
 
         {/* Results */}
         {result && (
-          <ResultViewer data={result} onCopyJson={handleCopyJson} />
+          <ResultViewer
+            data={result}
+            onCopyJson={handleCopyJson}
+            copied={copied}
+          />
         )}
+
+        {/* Footer */}
+        <p className="text-center text-xs text-gray-400 pb-4">
+          Images are processed server-side and never stored. NID data is not logged.
+        </p>
       </div>
     </main>
   );

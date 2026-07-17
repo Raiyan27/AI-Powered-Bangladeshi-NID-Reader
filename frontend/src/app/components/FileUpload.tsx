@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface FileUploadProps {
   id: string;
   label: string;
   onFileSelect: (file: File | null) => void;
   accept?: string;
+  initialFile?: File | null;
 }
 
 export default function FileUpload({
@@ -14,11 +15,21 @@ export default function FileUpload({
   label,
   onFileSelect,
   accept = ".jpg,.jpeg,.png",
+  initialFile,
 }: FileUploadProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Reset when parent clears the file
+  useEffect(() => {
+    if (!initialFile) {
+      setPreview(null);
+      setFileName("");
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }, [initialFile]);
 
   const handleFile = useCallback(
     (file: File | null) => {
@@ -76,16 +87,16 @@ export default function FileUpload({
           <img
             src={preview}
             alt={`Preview of ${label}`}
-            className="w-full h-48 object-contain p-2"
+            className="w-full h-44 object-contain p-2"
           />
-          <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-t border-gray-200">
-            <span className="text-sm text-gray-600 truncate max-w-[200px]">
+          <div className="flex items-center justify-between px-3 py-2 bg-white border-t border-gray-200">
+            <span className="text-xs text-gray-500 truncate max-w-[160px]">
               {fileName}
             </span>
             <button
               type="button"
               onClick={handleRemove}
-              className="text-sm text-red-500 hover:text-red-700 font-medium cursor-pointer"
+              className="text-xs text-red-500 hover:text-red-700 font-medium cursor-pointer"
             >
               Remove
             </button>
@@ -100,14 +111,14 @@ export default function FileUpload({
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
           onClick={() => inputRef.current?.click()}
-          className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+          className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
             dragOver
               ? "border-blue-400 bg-blue-50"
               : "border-gray-300 hover:border-blue-400 hover:bg-gray-50"
           }`}
         >
           <svg
-            className="mx-auto h-10 w-10 text-gray-400 mb-3"
+            className="mx-auto h-8 w-8 text-gray-400 mb-2"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"

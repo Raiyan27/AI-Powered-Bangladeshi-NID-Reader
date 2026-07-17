@@ -1,9 +1,37 @@
 @import "tailwindcss";
 
 @layer base {
+  :root {
+    --font-inter: "Inter", system-ui, -apple-system, sans-serif;
+  }
+
   body {
-    font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
-    background-color: #ffffff;
+    font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+    background-color: #f9fafb;
     color: #1f2937;
+  }
+
+  /* Smooth scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #d1d5db transparent;
+  }
+
+  /* Details summary arrow */
+  details > summary {
+    list-style: none;
+  }
+  details > summary::-webkit-details-marker {
+    display: none;
+  }
+  details > summary::before {
+    content: "▶ ";
+    font-size: 0.65rem;
+    transition: transform 0.15s;
+    display: inline-block;
+    margin-right: 4px;
+  }
+  details[open] > summary::before {
+    transform: rotate(90deg);
   }
 }

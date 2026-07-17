@@ -7,6 +7,12 @@ from app.services.image_service import validate_image, preprocess_image
 from app.services.ocr_service import run_ocr
 from app.services.vision_service import extract_with_vision
 from app.services.merge_service import merge_results
+from app.services.translation_service import (
+    normalize_date,
+    normalize_nid_number,
+    normalize_name,
+    normalize_address,
+)
 from app.services.validation_service import validate_extraction
 
 
@@ -24,8 +30,9 @@ async def extract_nid(
     3. Run OCR on both
     4. Run Vision AI with images + OCR text
     5. Merge OCR and Vision results
-    6. Validate final output
-    7. Return structured response
+    6. Normalize field values
+    7. Validate final output
+    8. Return structured response
     """
     start_time = time.time()
     logger.info("Starting NID extraction pipeline")
@@ -59,12 +66,24 @@ async def extract_nid(
         back_ocr_text=ocr_back.raw_text,
     )
 
-    # Step 5: Merge
+    # Step 5: Merge OCR + Vision results
     logger.info("Merging OCR and Vision results")
     merged_data, merge_warnings = merge_results(ocr_front, ocr_back, vision_result)
 
-    # Step 6: Validate
-    validation_warnings = validate_extraction(merged_data)
+    # Step 6: Normalize field values
+    logger.info("Normalizing extracted field values")
+    normalized = NIDData(
+        name=normalize_name(merged_data.name),
+        fatherName=normalize_name(merged_data.fatherName),
+        motherName=normalize_name(merged_data.motherName),
+        dateOfBirth=normalize_date(merged_data.dateOfBirth),
+        nidNumber=normalize_nid_number(merged_data.nidNumber),
+        presentAddress=normalize_address(merged_data.presentAddress),
+        permanentAddress=normalize_address(merged_data.permanentAddress),
+    )
+
+    # Step 7: Validate
+    validation_warnings = validate_extraction(normalized)
 
     all_warnings = merge_warnings + validation_warnings
 
@@ -72,6 +91,6 @@ async def extract_nid(
     logger.info(f"NID extraction completed in {elapsed:.2f}s with {len(all_warnings)} warnings")
 
     return SuccessResponse(
-        data=merged_data,
+        data=normalized,
         warnings=all_warnings,
     )

@@ -13,59 +13,87 @@ interface NIDData {
 interface ResultViewerProps {
   data: NIDData;
   onCopyJson: () => void;
+  copied?: boolean;
 }
 
-const FIELD_LABELS: Record<string, string> = {
-  name: "Name",
-  fatherName: "Father's Name",
-  motherName: "Mother's Name",
-  dateOfBirth: "Date of Birth",
-  nidNumber: "NID Number",
-  presentAddress: "Present Address",
-  permanentAddress: "Permanent Address",
-};
+const FIELD_LABELS: { key: keyof NIDData; label: string; icon: string }[] = [
+  { key: "name", label: "Full Name", icon: "👤" },
+  { key: "fatherName", label: "Father's Name", icon: "👨" },
+  { key: "motherName", label: "Mother's Name", icon: "👩" },
+  { key: "dateOfBirth", label: "Date of Birth", icon: "🎂" },
+  { key: "nidNumber", label: "NID Number", icon: "🪪" },
+  { key: "presentAddress", label: "Present Address", icon: "📍" },
+  { key: "permanentAddress", label: "Permanent Address", icon: "🏠" },
+];
 
-export default function ResultViewer({ data, onCopyJson }: ResultViewerProps) {
+export default function ResultViewer({
+  data,
+  onCopyJson,
+  copied = false,
+}: ResultViewerProps) {
+  const detectedCount = Object.values(data).filter(Boolean).length;
+  const totalCount = FIELD_LABELS.length;
+
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
-        <h2 className="text-sm font-semibold text-gray-700">
-          Extracted Information
-        </h2>
+    <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-4 bg-gray-50 border-b border-gray-200">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-green-500" />
+          <h2 className="text-sm font-semibold text-gray-800">
+            Extracted Information
+          </h2>
+          <span className="text-xs text-gray-400">
+            ({detectedCount}/{totalCount} fields)
+          </span>
+        </div>
         <button
+          id="copy-json-button"
           onClick={onCopyJson}
-          className="text-xs text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+          className={`text-xs font-medium cursor-pointer transition-colors px-2 py-1 rounded ${
+            copied
+              ? "text-green-600 bg-green-50"
+              : "text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+          }`}
         >
-          Copy JSON
+          {copied ? "✓ Copied!" : "Copy JSON"}
         </button>
       </div>
 
+      {/* Fields */}
       <div className="divide-y divide-gray-100">
-        {Object.entries(FIELD_LABELS).map(([key, label]) => {
-          const value = data[key as keyof NIDData];
+        {FIELD_LABELS.map(({ key, label, icon }) => {
+          const value = data[key];
           return (
-            <div key={key} className="flex px-4 py-3">
-              <span className="text-sm font-medium text-gray-500 w-40 shrink-0">
-                {label}
-              </span>
-              <span
-                className={`text-sm ${
-                  value ? "text-gray-900" : "text-gray-400 italic"
-                }`}
-              >
-                {value || "Not detected"}
-              </span>
+            <div key={key} className="flex items-start gap-3 px-5 py-3.5">
+              <span className="text-base mt-0.5 shrink-0">{icon}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-500 mb-0.5">
+                  {label}
+                </p>
+                <p
+                  className={`text-sm break-words ${
+                    value ? "text-gray-900 font-medium" : "text-gray-400 italic"
+                  }`}
+                >
+                  {value || "Not detected"}
+                </p>
+              </div>
             </div>
           );
         })}
       </div>
 
-      <div className="px-4 py-3 bg-gray-50 border-t border-gray-200">
+      {/* Raw JSON */}
+      <div className="px-5 py-4 bg-gray-50 border-t border-gray-200">
         <details>
-          <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+          <summary className="text-xs font-medium text-gray-500 cursor-pointer hover:text-gray-700 select-none">
             View Raw JSON
           </summary>
-          <pre className="mt-2 text-xs text-gray-600 bg-white p-3 rounded border border-gray-200 overflow-x-auto">
+          <pre
+            id="raw-json-output"
+            className="mt-3 text-xs text-gray-700 bg-white p-4 rounded-lg border border-gray-200 overflow-x-auto leading-relaxed"
+          >
             {JSON.stringify(data, null, 2)}
           </pre>
         </details>

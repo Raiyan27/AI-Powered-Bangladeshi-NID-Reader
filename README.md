@@ -1,144 +1,188 @@
 # Bangladesh NID Extractor
 
-AI-powered application that extracts information from both sides of a Bangladesh National ID (NID) card and returns structured data in English.
+An AI-powered web application that extracts structured information from Bangladesh National ID (NID) cards. Supports Bengali, English, and mixed-text cards.
 
 ## Overview
 
-This application uses a hybrid AI pipeline combining:
-- **PaddleOCR** for raw text extraction with confidence scoring
-- **Vision LLM** (via OpenRouter) for semantic understanding and translation
-- **OpenCV** for image preprocessing and quality enhancement
-
-Users upload front and back images of an NID card. The system processes both sides, extracts key fields, and returns structured JSON with all text translated to English.
+Users upload the **front** and **back** images of an NID card. The system:
+1. **Validates** the images (format, size, dimensions)
+2. **Preprocesses** them using OpenCV (deskew, denoise, contrast enhancement)
+3. **Runs OCR** with PaddleOCR to extract raw text and confidence scores
+4. **Analyzes** both images with a Vision LLM via OpenRouter (e.g., Gemini 2.5 Flash)
+5. **Merges** OCR and AI results using a confidence-based strategy
+6. **Normalizes** field values (date format, name casing, NID digit cleanup)
+7. **Returns** a structured JSON response
 
 ## Architecture
 
 ```
-User → Web Interface → FastAPI REST API
-                            │
-                    ┌───────┴───────┐
-                    │               │
-              Image Validation   Request Mgmt
-                    │
-              Image Preprocessing
-              (OpenCV + Pillow)
-                    │
-              ┌─────┴─────┐
-              │            │
-          PaddleOCR    Vision LLM
-          (raw text)   (semantic)
-              │            │
-              └─────┬──────┘
-                    │
-            Merge & Validation
-                    │
-              JSON Response
+User
+ │
+ ▼
+Next.js Frontend (TypeScript + Tailwind CSS)
+ │
+ │  POST /extract  (multipart/form-data)
+ ▼
+FastAPI Backend
+ │
+ ├─ Image Validation (Pillow)
+ ├─ Image Preprocessing (OpenCV + Pillow)
+ │   └─ Auto-rotate, resize, deskew, CLAHE contrast, denoise
+ │
+ ├─ PaddleOCR Engine (English model)
+ │   └─ Text + bounding boxes + confidence scores
+ │
+ ├─ Vision LLM (OpenRouter API)
+ │   └─ Reads Bengali + English text from images
+ │   └─ Uses OCR as supporting reference
+ │
+ ├─ Merge Layer
+ │   └─ Numeric fields (NID#, DOB): prefer high-confidence OCR
+ │   └─ Text fields (names, addresses): prefer Vision AI
+ │
+ ├─ Translation/Normalization Layer
+ │   └─ Date → YYYY-MM-DD, NID → digits-only, names → title case
+ │
+ └─ Pydantic Validation + Warnings
+     └─ Returns warnings for missing fields, format mismatches
 ```
 
-### Pipeline Details
+**Why both OCR and Vision AI?**
+- PaddleOCR is fast and accurate for structured fields like NID numbers and dates
+- Vision LLMs (e.g., Gemini) excel at understanding Bengali semantics, names, and addresses
+- Combining both gives higher accuracy than either alone
 
-1. **Image Validation**: Checks format, size, dimensions, corruption
-2. **Preprocessing**: Auto-rotate, deskew, contrast enhancement, denoising
-3. **PaddleOCR**: Extracts raw text with bounding boxes and confidence scores
-4. **Vision AI**: Analyzes images with OCR context for semantic extraction
-5. **Merge Layer**: Combines results — OCR preferred for numbers, AI for names/addresses
-6. **Validation**: Checks completeness, generates warnings for missing fields
+## Project Structure
 
-## Extracted Fields
+```
+.
+├── backend/
+│   ├── app/
+│   │   ├── api/routes.py          # FastAPI endpoints
+│   │   ├── core/config.py         # Settings from YAML + env vars
+│   │   ├── core/logging.py        # Structured logging
+│   │   ├── prompts/nid_extraction.txt  # Vision AI prompt
+│   │   ├── schemas/               # Pydantic models
+│   │   └── services/
+│   │       ├── image_service.py   # Validation + preprocessing
+│   │       ├── ocr_service.py     # PaddleOCR wrapper
+│   │       ├── vision_service.py  # OpenRouter Vision API
+│   │       ├── merge_service.py   # Merge strategy
+│   │       ├── translation_service.py  # Normalization
+│   │       ├── extraction_service.py   # Pipeline orchestrator
+│   │       └── validation_service.py   # Output validation
+│   ├── tests/                     # Pytest unit + integration tests
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── src/app/
+│   │   ├── page.tsx               # Main upload page
+│   │   ├── layout.tsx             # App layout + SEO
+│   │   └── components/
+│   │       ├── FileUpload.tsx     # Drag & drop image uploader
+│   │       ├── ResultViewer.tsx   # Structured result display
+│   │       └── ErrorDisplay.tsx   # Error + warnings display
+│   └── Dockerfile
+│
+├── samples/
+│   ├── NID.jpg          # Original NID sample (front + back combined)
+│   ├── NID_front.jpg    # Split front image for testing
+│   ├── NID_back.jpg     # Split back image for testing
+│   └── NID.json         # Expected extraction output for the sample
+│
+├── config.yaml          # Application configuration
+├── docker-compose.yml   # Docker orchestration
+└── .env.example         # Environment variable template
+```
 
-| Field | Description |
-|-------|------------|
-| name | Full name (English) |
-| fatherName | Father's name (English) |
-| motherName | Mother's name (English) |
-| dateOfBirth | Date of birth (YYYY-MM-DD) |
-| nidNumber | National ID number |
-| presentAddress | Present address (English) |
-| permanentAddress | Permanent address (English) |
-
-## Technology Stack
-
-| Component | Technology |
-|-----------|-----------|
-| Backend | Python 3.12, FastAPI, Pydantic v2 |
-| OCR | PaddleOCR |
-| Image Processing | OpenCV, Pillow |
-| AI Model | OpenRouter API (configurable model) |
-| Frontend | Next.js 15, TypeScript, Tailwind CSS |
-| Deployment | Docker, Docker Compose |
-
-## Installation
+## Installation (Local Development)
 
 ### Prerequisites
-- Docker and Docker Compose
-- OpenRouter API key ([get one here](https://openrouter.ai/keys))
 
-### Quick Start (Docker)
+- Python 3.12+
+- Node.js 20+
+- An [OpenRouter](https://openrouter.ai/) API key
 
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd IDLC-TAP-task
-   ```
+### Backend
 
-2. Create environment file:
-   ```bash
-   cp .env.example .env
-   # Edit .env and add your OpenRouter API key
-   ```
-
-3. Run with Docker:
-   ```bash
-   docker compose up --build
-   ```
-
-4. Open `http://localhost:3000` in your browser
-
-### Local Development
-
-**Backend:**
 ```bash
+# Create virtual environment
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+# source .venv/bin/activate  # macOS/Linux
+
+# Install dependencies
+pip install -r backend/requirements.txt
+
+# Set environment variables
+copy .env.example .env
+# Edit .env and set OPENROUTER_API_KEY and OPENROUTER_MODEL
+
+# Start the backend
 cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-**Frontend:**
+### Frontend
+
 ```bash
 cd frontend
 npm install
+
+# Set the API URL for local development
+echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > .env.local
+
+# Start the dev server
 npm run dev
 ```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Docker Setup
+
+```bash
+# 1. Copy the environment file
+copy .env.example .env
+
+# 2. Set your API key in .env
+# OPENROUTER_API_KEY=your_key_here
+# OPENROUTER_MODEL=google/gemini-2.5-flash
+
+# 3. Build and start everything
+docker compose up --build
+```
+
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- Health check: http://localhost:8000/health
 
 ## Environment Variables
 
 | Variable | Required | Default | Description |
-|----------|----------|---------|------------|
-| `OPENROUTER_API_KEY` | Yes | — | OpenRouter API key |
+|---|---|---|---|
+| `OPENROUTER_API_KEY` | Yes | — | Your OpenRouter API key |
 | `OPENROUTER_MODEL` | No | `google/gemini-2.5-flash` | Vision model to use |
-
-Additional configuration is in `config.yaml` at the project root.
 
 ## API Documentation
 
-### Health Check
-```
-GET /health
+### `GET /health`
 
-Response: { "status": "ok" }
+Returns service health status.
+
+```json
+{ "status": "ok" }
 ```
 
-### Extract NID Information
-```
-POST /extract
-Content-Type: multipart/form-data
+### `POST /extract`
 
-Parameters:
-  front: (file) Front side image of NID card
-  back:  (file) Back side image of NID card
-```
+Extracts NID information from uploaded images.
+
+**Content-Type:** `multipart/form-data`
+
+**Fields:**
+- `front` — Front side image (JPG/JPEG/PNG, max 10 MB)
+- `back` — Back side image (JPG/JPEG/PNG, max 10 MB)
 
 **Success Response:**
 ```json
@@ -151,7 +195,7 @@ Parameters:
     "dateOfBirth": "1998-01-15",
     "nidNumber": "1234567890123",
     "presentAddress": "Dhaka, Bangladesh",
-    "permanentAddress": "Cumilla, Bangladesh"
+    "permanentAddress": "Dhaka, Bangladesh"
   },
   "warnings": []
 }
@@ -163,66 +207,78 @@ Parameters:
   "success": false,
   "error": {
     "code": "INVALID_IMAGE_FORMAT",
-    "message": "Unsupported file format. Supported: jpg, jpeg, png."
+    "message": "Unsupported file format '.gif'. Supported: jpg, jpeg, png."
   }
 }
 ```
 
-### Error Codes
+**Error Codes:**
 
 | Code | Description |
-|------|------------|
+|---|---|
 | `MISSING_FRONT_IMAGE` | Front image not provided |
 | `MISSING_BACK_IMAGE` | Back image not provided |
-| `INVALID_IMAGE_FORMAT` | Unsupported or corrupted file |
-| `LOW_IMAGE_QUALITY` | Image too small or unreadable |
-| `OCR_FAILED` | OCR engine failure |
-| `AI_EXTRACTION_FAILED` | Vision AI failure |
-
-## Configuration
-
-The `config.yaml` file at the project root controls both frontend and backend settings:
-
-```yaml
-backend:
-  max_upload_size_mb: 10
-  supported_formats: [jpg, jpeg, png]
-
-ocr:
-  languages: [en, bn]
-  confidence_threshold: 0.5
-
-vision:
-  default_model: "google/gemini-2.5-flash"
-  temperature: 0.1
-```
+| `INVALID_IMAGE_FORMAT` | Wrong file format or corrupted file |
+| `LOW_IMAGE_QUALITY` | Image too small or resolution too low |
+| `OCR_FAILED` | PaddleOCR could not process the image |
+| `AI_EXTRACTION_FAILED` | Vision AI API error |
+| `INTERNAL_ERROR` | Unexpected server error |
 
 ## Testing
 
 ```bash
 cd backend
-python -m pytest tests/ -v
+pytest tests/ -v
 ```
+
+The test suite includes:
+- **API tests**: endpoint validation, error responses
+- **Merge tests**: OCR + Vision AI merge logic
+- **Validation tests**: field validation, warning generation
+- **Integration tests**: full pipeline with sample NID images (Vision AI mocked)
+- **Translation tests**: date normalization, NID number cleaning
+
+## Testing with the Sample NID
+
+The `samples/` directory contains a real NID card image (already split into front/back):
+
+```bash
+# Using curl
+curl -X POST http://localhost:8000/extract \
+  -F "front=@samples/NID_front.jpg" \
+  -F "back=@samples/NID_back.jpg"
+```
+
+Expected output is in `samples/NID.json`.
 
 ## AI Usage Documentation
 
 ### AI Tools Used During Development
-- **Antigravity (Gemini)**: Primary AI coding assistant used for code generation and architecture design
-- **OpenRouter API**: Runtime AI for NID card analysis (Vision LLM)
 
-### How AI-Generated Code Was Verified
-- All generated code was reviewed for correctness and security
-- API contracts were validated against the specification
-- Unit tests were written to verify validation and merge logic
-- End-to-end testing with sample NID images
-- Error handling paths were manually verified
+- **Antigravity (Google DeepMind)** — Used for code generation, architecture planning, and iterative refinement
+- **OpenRouter / Gemini 2.5 Flash** — Used as the Vision LLM for NID information extraction at runtime
 
-### What Was Modified
-- Image preprocessing parameters tuned for NID card characteristics
-- Merge strategy refined based on OCR confidence behavior
-- Prompt template iterated for accurate Bengali-to-English translation
-- Security checks added for file uploads
+### Prompts Used
 
-## License
+The extraction prompt is in [`backend/app/prompts/nid_extraction.txt`](backend/app/prompts/nid_extraction.txt).
 
-This project was built as a technical assessment for IDLC TAP.
+Key prompt engineering decisions:
+- Instructed the model to prefer image content over OCR text (OCR is reference only)
+- Provided concrete Bengali → English transliteration examples from the sample card
+- Required strict ISO date format (`YYYY-MM-DD`) to simplify post-processing
+- Required JSON-only output (no markdown, no explanations)
+
+### Verification
+
+All generated code was verified by:
+1. Running the full test suite (`pytest tests/ -v`)
+2. Manual testing with `samples/NID_front.jpg` and `samples/NID_back.jpg`
+3. Comparing output against `samples/NID.json` (ground truth)
+4. Reviewing each service file for correctness, type safety, and edge cases
+
+### Manual Modifications
+
+- OCR service: simplified to English-only model (PaddleOCR doesn't support Bengali natively; Vision AI handles it)
+- Merge service: tuned confidence thresholds and warning messages
+- Prompt: multiple iterations to improve Bengali name transliteration accuracy
+- Translation service: added date normalization for `DD Mon YYYY` format (common Vision AI output)

@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import httpx
@@ -18,9 +19,25 @@ class VisionExtractionError(Exception):
 
 
 def _load_prompt_template() -> str:
-    """Load the NID extraction prompt template."""
+    """Load the NID extraction prompt template from file."""
     prompt_path = Path(__file__).parent.parent / "prompts" / "nid_extraction.txt"
     return prompt_path.read_text(encoding="utf-8")
+
+
+def _clean_json_response(content: str) -> str:
+    """Strip markdown code fences and extra whitespace from model response.
+
+    Vision models sometimes wrap JSON in ```json ... ``` blocks despite
+    instructions not to. This strips those fences defensively.
+    """
+    content = content.strip()
+
+    # Remove ```json ... ``` or ``` ... ``` fences
+    content = re.sub(r"^```(?:json)?\s*", "", content)
+    content = re.sub(r"\s*```$", "", content)
+    content = content.strip()
+
+    return content
 
 
 async def extract_with_vision(
@@ -42,18 +59,17 @@ async def extract_with_vision(
             message="OpenRouter API key is not configured.",
         )
 
-    # Build prompt with OCR text
+    # Build prompt with OCR context
     prompt_template = _load_prompt_template()
     prompt = prompt_template.format(
-        front_ocr_text=front_ocr_text or "(No text detected)",
-        back_ocr_text=back_ocr_text or "(No text detected)",
+        front_ocr_text=front_ocr_text or "(No text detected by OCR)",
+        back_ocr_text=back_ocr_text or "(No text detected by OCR)",
     )
 
-    # Encode images as base64
+    # Encode images to base64 for the multimodal API
     front_b64 = image_to_base64(front_image_bytes)
     back_b64 = image_to_base64(back_image_bytes)
 
-    # Build OpenRouter API request
     payload = {
         "model": settings.model,
         "max_tokens": settings.vision.max_tokens,
@@ -90,7 +106,7 @@ async def extract_with_vision(
     logger.info(f"Sending Vision AI request to OpenRouter (model: {settings.model})")
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=90.0) as client:
             response = await client.post(
                 "https://openrouter.ai/api/v1/chat/completions",
                 json=payload,
@@ -98,40 +114,42 @@ async def extract_with_vision(
             )
 
         if response.status_code != 200:
-            logger.error(f"OpenRouter API error: {response.status_code} - {response.text}")
+            logger.error(f"OpenRouter API error: {response.status_code} - {response.text[:500]}")
             raise VisionExtractionError(
                 code="AI_EXTRACTION_FAILED",
                 message="AI extraction service returned an error. Please try again.",
             )
 
         response_data = response.json()
-        content = response_data["choices"][0]["message"]["content"]
+        raw_content = response_data["choices"][0]["message"]["content"]
 
         logger.info("Vision AI response received, parsing JSON")
+        logger.debug(f"Raw Vision AI response: {raw_content[:300]}")
 
-        # Clean response - remove markdown code fences if present
-        content = content.strip()
-        if content.startswith("```"):
-            content = content.split("\n", 1)[1] if "\n" in content else content[3:]
-        if content.endswith("```"):
-            content = content[:-3]
-        content = content.strip()
-        if content.startswith("json"):
-            content = content[4:].strip()
+        content = _clean_json_response(raw_content)
 
-        nid_data = json.loads(content)
-        return NIDData(**nid_data)
+        nid_dict = json.loads(content)
+
+        # Only pass known NIDData fields to avoid unexpected key errors
+        known_fields = {
+            "name", "fatherName", "motherName",
+            "dateOfBirth", "nidNumber", "presentAddress", "permanentAddress",
+        }
+        filtered = {k: v for k, v in nid_dict.items() if k in known_fields}
+
+        return NIDData(**filtered)
 
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse Vision AI response as JSON: {e}")
+        logger.error(f"Unparseable content: {raw_content[:500] if 'raw_content' in dir() else '(unavailable)'}")
         raise VisionExtractionError(
             code="AI_EXTRACTION_FAILED",
-            message="AI model returned an unparseable response.",
+            message="AI model returned an unparseable response. Please try again.",
         )
     except VisionExtractionError:
         raise
     except Exception as e:
-        logger.error(f"Vision AI extraction failed: {e}")
+        logger.error(f"Vision AI extraction failed: {e}", exc_info=True)
         raise VisionExtractionError(
             code="AI_EXTRACTION_FAILED",
             message="AI extraction failed. Please try again.",
