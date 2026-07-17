@@ -19,7 +19,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ app/
 
 # Pre-download PaddleOCR models during build
-RUN python -c "from paddleocr import PaddleOCR; PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False, show_log=False)"
+RUN python -c "import inspect; from paddleocr import PaddleOCR; params = inspect.signature(PaddleOCR.__init__).parameters; kwargs = {'lang': 'en', 'show_log': False}; kwargs['device' if 'use_textline_orientation' in params else 'use_gpu'] = 'cpu' if 'use_textline_orientation' in params else False; PaddleOCR(**kwargs)"
+
 
 EXPOSE 8000
 

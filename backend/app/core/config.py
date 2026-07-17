@@ -4,6 +4,24 @@ from functools import lru_cache
 
 import yaml
 from pydantic import BaseModel
+from dotenv import load_dotenv
+
+
+def _load_env_file() -> None:
+    """Find and load the .env file from common candidate paths."""
+    candidates = [
+        Path.cwd() / ".env",
+        Path(__file__).resolve().parents[2] / ".env",
+        Path(__file__).resolve().parents[3] / ".env",
+    ]
+    for path in candidates:
+        if path.exists():
+            load_dotenv(dotenv_path=path)
+            return
+    load_dotenv()  # Fallback to standard behaviour
+
+
+_load_env_file()
 
 
 class AppConfig(BaseModel):
