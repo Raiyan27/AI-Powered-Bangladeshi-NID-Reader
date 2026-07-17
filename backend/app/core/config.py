@@ -1,6 +1,4 @@
 import os
-os.environ["FLAGS_use_mkldnn"] = "0"
-os.environ["PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT"] = "0"
 
 from pathlib import Path
 from functools import lru_cache
@@ -49,7 +47,7 @@ class OCRConfig(BaseModel):
 
 
 class VisionConfig(BaseModel):
-    default_model: str = "google/gemini-2.5-flash"
+    default_model: str = "google/gemini-3.1-flash-lite"
     max_tokens: int = 2048
     temperature: float = 0.1
 

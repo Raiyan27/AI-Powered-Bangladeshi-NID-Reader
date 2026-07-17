@@ -54,7 +54,7 @@ export default function RootLayout({
               Bangladesh NID Extractor · IDLC TAP Project
             </p>
             <p className="text-xs text-gray-400">
-              Powered by PaddleOCR + OpenRouter
+              Powered by EasyOCR + OpenRouter
             </p>
           </div>
         </footer>

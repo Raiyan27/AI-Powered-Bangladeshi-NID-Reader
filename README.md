@@ -7,7 +7,7 @@ An AI-powered web application that extracts structured information from Banglade
 Users upload the **front** and **back** images of an NID card. The system:
 1. **Validates** the images (format, size, dimensions)
 2. **Preprocesses** them using OpenCV (deskew, denoise, contrast enhancement)
-3. **Runs OCR** with PaddleOCR to extract raw text and confidence scores
+3. **Runs OCR** with EasyOCR to extract raw Bengali + English text and confidence scores
 4. **Analyzes** both images with a Vision LLM via OpenRouter (e.g., Gemini 2.5 Flash)
 5. **Merges** OCR and AI results using a confidence-based strategy
 6. **Normalizes** field values (date format, name casing, NID digit cleanup)
@@ -29,7 +29,7 @@ FastAPI Backend
  ├─ Image Preprocessing (OpenCV + Pillow)
  │   └─ Auto-rotate, resize, deskew, CLAHE contrast, denoise
  │
- ├─ PaddleOCR Engine (English model)
+ ├─ EasyOCR Engine (Bengali + English)
  │   └─ Text + bounding boxes + confidence scores
  │
  ├─ Vision LLM (OpenRouter API)
@@ -48,7 +48,7 @@ FastAPI Backend
 ```
 
 **Why both OCR and Vision AI?**
-- PaddleOCR is fast and accurate for structured fields like NID numbers and dates
+- EasyOCR is fast and supports both Bengali and English natively for structured fields like NID numbers and dates
 - Vision LLMs (e.g., Gemini) excel at understanding Bengali semantics, names, and addresses
 - Combining both gives higher accuracy than either alone
 
@@ -65,7 +65,7 @@ FastAPI Backend
 │   │   ├── schemas/               # Pydantic models
 │   │   └── services/
 │   │       ├── image_service.py   # Validation + preprocessing
-│   │       ├── ocr_service.py     # PaddleOCR wrapper
+│   │       ├── ocr_service.py     # EasyOCR wrapper (Bengali + English)
 │   │       ├── vision_service.py  # OpenRouter Vision API
 │   │       ├── merge_service.py   # Merge strategy
 │   │       ├── translation_service.py  # Normalization
@@ -147,7 +147,7 @@ copy .env.example .env
 
 # 2. Set your API key in .env
 # OPENROUTER_API_KEY=your_key_here
-# OPENROUTER_MODEL=google/gemini-2.5-flash
+# OPENROUTER_MODEL=google/gemini-3.1-flash-lite
 
 # 3. Build and start everything
 docker compose up --build
@@ -162,7 +162,7 @@ docker compose up --build
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `OPENROUTER_API_KEY` | Yes | — | Your OpenRouter API key |
-| `OPENROUTER_MODEL` | No | `google/gemini-2.5-flash` | Vision model to use |
+| `OPENROUTER_MODEL` | No | `google/gemini-3.1-flash-lite` | Vision model to use |
 
 ## API Documentation
 
@@ -220,7 +220,7 @@ Extracts NID information from uploaded images.
 | `MISSING_BACK_IMAGE` | Back image not provided |
 | `INVALID_IMAGE_FORMAT` | Wrong file format or corrupted file |
 | `LOW_IMAGE_QUALITY` | Image too small or resolution too low |
-| `OCR_FAILED` | PaddleOCR could not process the image |
+| `OCR_FAILED` | EasyOCR could not process the image |
 | `AI_EXTRACTION_FAILED` | Vision AI API error |
 | `INTERNAL_ERROR` | Unexpected server error |
 
@@ -278,7 +278,7 @@ All generated code was verified by:
 
 ### Manual Modifications
 
-- OCR service: simplified to English-only model (PaddleOCR doesn't support Bengali natively; Vision AI handles it)
+- OCR service: migrated from PaddleOCR (English-only) to EasyOCR (Bengali + English) for native multilingual support
 - Merge service: tuned confidence thresholds and warning messages
 - Prompt: multiple iterations to improve Bengali name transliteration accuracy
 - Translation service: added date normalization for `DD Mon YYYY` format (common Vision AI output)

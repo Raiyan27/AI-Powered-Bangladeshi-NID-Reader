@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-# System dependencies for OpenCV and PaddleOCR
+# System dependencies for OpenCV and EasyOCR
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
     libglib2.0-0 \
@@ -18,8 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY app/ app/
 
-# Pre-download PaddleOCR models during build
-RUN python -c "import inspect; from paddleocr import PaddleOCR; params = inspect.signature(PaddleOCR.__init__).parameters; kwargs = {'lang': 'en', 'show_log': False}; kwargs['device' if 'use_textline_orientation' in params else 'use_gpu'] = 'cpu' if 'use_textline_orientation' in params else False; PaddleOCR(**kwargs)"
+# Pre-download EasyOCR models (Bengali + English) during build
+RUN python -c "import easyocr; easyocr.Reader(['en', 'bn'], gpu=False)"
 
 
 EXPOSE 8000

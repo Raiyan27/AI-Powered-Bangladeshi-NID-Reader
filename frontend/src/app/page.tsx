@@ -259,7 +259,7 @@ export default function Home() {
                 {
                   step: "2",
                   title: "OCR Extraction",
-                  desc: "PaddleOCR detects text with confidence scores",
+                  desc: "EasyOCR detects Bengali + English text with confidence scores",
                 },
                 {
                   step: "3",

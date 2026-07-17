@@ -1,71 +1,41 @@
-import os
-os.environ["FLAGS_use_mkldnn"] = "0"
-os.environ["PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT"] = "0"
+import warnings
+warnings.filterwarnings("ignore", message=".*pin_memory.*")
 
+import easyocr
 import numpy as np
-from paddleocr import PaddleOCR
 
 from app.core.config import get_settings
 from app.core.logging import logger
 from app.schemas.nid import OCRResult, OCROutput
 
 # Module-level OCR engine instance (initialized lazily).
-# PaddleOCR does not support Bengali (bn) natively.
-# We use the English model which also detects digits and Latin text from NID cards.
-# Bengali text extraction is handled by the Vision AI model downstream.
-_ocr_engine: PaddleOCR | None = None
+# EasyOCR supports Bengali (bn) and English (en) natively.
+_ocr_engine: easyocr.Reader | None = None
 _ocr_initialization_failed = False
-_ocr_is_v3 = False
 
 
-def get_ocr_engine() -> PaddleOCR | None:
-    """Get or initialize PaddleOCR engine.
+def get_ocr_engine() -> easyocr.Reader | None:
+    """Get or initialize EasyOCR engine.
 
-    Uses dynamic argument selection to support both PaddleOCR 2.x and 3.x APIs.
-    If the library or its runtime dependencies (e.g. paddlepaddle) are missing,
-    it returns None and logs a warning rather than crashing.
+    Creates a Reader with Bengali and English language support.
+    If the library or its dependencies are missing, returns None and
+    logs a warning rather than crashing.
     """
-    global _ocr_engine, _ocr_initialization_failed, _ocr_is_v3
+    global _ocr_engine, _ocr_initialization_failed
     if _ocr_initialization_failed:
         return None
 
     if _ocr_engine is None:
         try:
             settings = get_settings()
-            logger.info("Initializing PaddleOCR engine...")
+            languages = settings.ocr.languages
+            use_gpu = settings.ocr.use_gpu
 
-            import inspect
-            sig = inspect.signature(PaddleOCR.__init__)
-            params = sig.parameters
-
-            kwargs = {}
-
-            # Detect PaddleOCR 3.x vs 2.x
-            is_v3 = "use_textline_orientation" in params
-            _ocr_is_v3 = is_v3
-
-            if is_v3:
-                # PaddleOCR 3.x configuration
-                kwargs["device"] = "gpu" if settings.ocr.use_gpu else "cpu"
-                kwargs["use_textline_orientation"] = True
-            else:
-                # PaddleOCR 2.x configuration
-                kwargs["use_gpu"] = settings.ocr.use_gpu
-                kwargs["use_angle_cls"] = True
-
-            # Set language and logs
-            if "lang" in params:
-                kwargs["lang"] = "en"
-            if "show_log" in params:
-                kwargs["show_log"] = False
-
-            logger.info(f"PaddleOCR args: {kwargs}")
-            _ocr_engine = PaddleOCR(**kwargs)
-            logger.info("PaddleOCR engine initialized successfully")
+            logger.info(f"Initializing EasyOCR engine (languages={languages}, gpu={use_gpu})...")
+            _ocr_engine = easyocr.Reader(languages, gpu=use_gpu)
+            logger.info("EasyOCR engine initialized successfully")
         except Exception as e:
-            logger.error(
-                f"PaddleOCR engine initialization failed (possibly due to missing dependencies like paddlepaddle): {e}"
-            )
+            logger.error(f"EasyOCR engine initialization failed: {e}")
             _ocr_initialization_failed = True
             _ocr_engine = None
 
@@ -73,100 +43,49 @@ def get_ocr_engine() -> PaddleOCR | None:
 
 
 def run_ocr(image: np.ndarray) -> OCROutput:
-    """Run PaddleOCR on a preprocessed image.
+    """Run EasyOCR on a preprocessed image.
 
     Returns structured OCR output with text, confidence, and positions.
-    Detects English text and numeric data (NID number, date of birth).
-    Bengali text is recognized opportunistically; Vision AI is the primary
-    source for Bengali semantic content.
+    Detects both Bengali and English text from NID cards.
 
-    If PaddleOCR is unavailable or fails, returns an empty OCROutput so the
-    pipeline can fallback completely to Vision AI.
+    If EasyOCR is unavailable or fails, returns an empty OCROutput so the
+    pipeline can fall back completely to Vision AI.
     """
     settings = get_settings()
     engine = get_ocr_engine()
 
     if engine is None:
-        logger.warning("PaddleOCR is unavailable; skipping OCR step and falling back entirely to Vision AI")
+        logger.warning("EasyOCR is unavailable; skipping OCR step and falling back entirely to Vision AI")
         return OCROutput()
 
     try:
-        global _ocr_is_v3
-        if _ocr_is_v3:
-            result = engine.ocr(image)
-        else:
-            result = engine.ocr(image, cls=True)
+        # EasyOCR returns list of (bbox, text, confidence)
+        results = engine.readtext(image)
     except Exception as e:
-        logger.error(f"PaddleOCR execution failed: {e}")
+        logger.error(f"EasyOCR execution failed: {e}")
         return OCROutput()
 
-    # PaddleOCR may return None or [None] on empty images
-    if not result or result[0] is None:
-        logger.warning("PaddleOCR returned no results")
+    if not results:
+        logger.warning("EasyOCR returned no results")
         return OCROutput()
 
     ocr_results: list[OCRResult] = []
     total_confidence = 0.0
 
-    # Parse results based on PaddleOCR version (v3 dictionary vs v2 list)
-    if isinstance(result[0], dict):
-        res_dict = result[0]
-        rec_texts = res_dict.get("rec_texts", [])
-        rec_scores = res_dict.get("rec_scores", [])
-        rec_polys = res_dict.get("rec_polys", []) or res_dict.get("rec_boxes", [])
-
-        for i in range(len(rec_texts)):
-            text = str(rec_texts[i])
-            confidence = float(rec_scores[i])
-
-            if i < len(rec_polys):
-                poly = rec_polys[i]
-                try:
-                    if len(poly) == 4 and hasattr(poly[0], "__len__") and len(poly[0]) >= 2:
-                        # Polygon (list of 4 coordinates)
-                        center_x = sum(p[0] for p in poly) / 4.0
-                        center_y = sum(p[1] for p in poly) / 4.0
-                    elif len(poly) == 4:
-                        # Bounding box [x_min, y_min, x_max, y_max]
-                        center_x = (poly[0] + poly[2]) / 2.0
-                        center_y = (poly[1] + poly[3]) / 2.0
-                    else:
-                        center_x, center_y = 0.0, 0.0
-                except Exception:
-                    center_x, center_y = 0.0, 0.0
-            else:
-                center_x, center_y = 0.0, 0.0
-
-            ocr_results.append(OCRResult(
-                text=text,
-                confidence=confidence,
-                position=[center_x, center_y],
-            ))
-            total_confidence += confidence
-    else:
-        # Standard PaddleOCR v2 format
-        for line in result[0]:
-            if not line or len(line) < 2:
-                continue
-            bbox = line[0]
-            text_data = line[1]
-
-            if not text_data or len(text_data) < 2:
-                continue
-
-            text = str(text_data[0])
-            confidence = float(text_data[1])
-
-            # Compute center of bounding box as position reference
+    for bbox, text, confidence in results:
+        # bbox is a list of 4 corner points: [[x0,y0], [x1,y1], [x2,y2], [x3,y3]]
+        try:
             center_x = sum(p[0] for p in bbox) / 4.0
             center_y = sum(p[1] for p in bbox) / 4.0
+        except Exception:
+            center_x, center_y = 0.0, 0.0
 
-            ocr_results.append(OCRResult(
-                text=text,
-                confidence=confidence,
-                position=[center_x, center_y],
-            ))
-            total_confidence += confidence
+        ocr_results.append(OCRResult(
+            text=str(text),
+            confidence=float(confidence),
+            position=[center_x, center_y],
+        ))
+        total_confidence += float(confidence)
 
     # Filter results below the confidence threshold
     filtered = [r for r in ocr_results if r.confidence >= settings.ocr.confidence_threshold]
