@@ -31,6 +31,10 @@ class TestNormalizeDate:
     def test_empty_returns_none(self):
         assert normalize_date("") is None
 
+    def test_bengali_digits_normalized(self):
+        assert normalize_date("১৫-০১-১৯৯৮") == "1998-01-15"
+        assert normalize_date("27 Jul ২০০২") == "1998-01-15"
+
 
 class TestNormalizeNidNumber:
     def test_clean_10_digit(self):
@@ -47,6 +51,10 @@ class TestNormalizeNidNumber:
 
     def test_empty_returns_none(self):
         assert normalize_nid_number("") is None
+
+    def test_bengali_digits_normalized(self):
+        assert normalize_nid_number("১২৩৪৫৬৭৮৯০১২৩") == "1234567890123"
+        assert normalize_nid_number("১২৩৪-৫৬৭-৮৯০") == "1234567890123"
 
 
 class TestNormalizeName:

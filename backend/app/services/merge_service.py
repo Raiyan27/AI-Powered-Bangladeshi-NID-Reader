@@ -2,6 +2,7 @@ import re
 
 from app.core.logging import logger
 from app.schemas.nid import NIDData, OCROutput
+from app.services.translation_service import normalize_date
 
 
 def merge_results(
@@ -68,13 +69,15 @@ def _extract_nid_from_ocr(front: OCROutput, back: OCROutput) -> str | None:
     all_results = front.results + back.results
 
     for result in sorted(all_results, key=lambda r: r.confidence, reverse=True):
-        # Clean text: remove spaces, dashes
-        cleaned = re.sub(r'[\s\-]', '', result.text)
+        # Clean text: remove spaces, dashes, colons, and dots
+        cleaned = re.sub(r'[\s\-\:\.]', '', result.text)
 
-        # Check if it's a plausible NID number (10, 13, or 17 digits)
-        if re.match(r'^\d{10}$|^\d{13}$|^\d{17}$', cleaned):
-            logger.info(f"Found NID number via OCR: {cleaned} (confidence: {result.confidence:.2f})")
-            return cleaned
+        # Match a sequence of exactly 10, 13, or 17 digits (ensuring no surrounding digits)
+        match = re.search(r'(?<!\d)(\d{10}|\d{13}|\d{17})(?!\d)', cleaned)
+        if match:
+            nid = match.group(1)
+            logger.info(f"Found NID number via OCR: {nid} (confidence: {result.confidence:.2f})")
+            return nid
 
     return None
 
@@ -85,30 +88,24 @@ def _extract_date_from_ocr(front: OCROutput, back: OCROutput) -> str | None:
     Looks for date patterns and normalizes to YYYY-MM-DD format.
     """
     all_results = front.results + back.results
-    date_patterns = [
-        # DD Mon YYYY, DD-MM-YYYY, DD/MM/YYYY, DD.MM.YYYY
-        r'(\d{1,2})\s*[/\-\.]\s*(\d{1,2})\s*[/\-\.]\s*(\d{4})',
-        # YYYY-MM-DD
-        r'(\d{4})\s*[/\-\.]\s*(\d{1,2})\s*[/\-\.]\s*(\d{1,2})',
+    patterns = [
+        # DD Mon YYYY / DD Month YYYY (e.g. "15 Jan 1998", "27 July 2002")
+        r'\b\d{1,2}\s+[A-Za-z]+\s+\d{4}\b',
+        # DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY
+        r'\b\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4}\b',
+        # YYYY-MM-DD, YYYY/MM/DD, YYYY.MM.DD
+        r'\b\d{4}[/\-\.]\d{1,2}[/\-\.]\d{1,2}\b',
     ]
 
     for result in sorted(all_results, key=lambda r: r.confidence, reverse=True):
         text = result.text.strip()
-
-        # Try DD/MM/YYYY or DD-MM-YYYY pattern
-        match = re.search(date_patterns[0], text)
-        if match:
-            day, month, year = match.groups()
-            day, month = int(day), int(month)
-            if 1 <= day <= 31 and 1 <= month <= 12:
-                return f"{year}-{month:02d}-{day:02d}"
-
-        # Try YYYY-MM-DD pattern
-        match = re.search(date_patterns[1], text)
-        if match:
-            year, month, day = match.groups()
-            month, day = int(month), int(day)
-            if 1 <= day <= 31 and 1 <= month <= 12:
-                return f"{year}-{month:02d}-{day:02d}"
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                candidate = match.group(0)
+                normalized = normalize_date(candidate)
+                if normalized and re.match(r'^\d{4}-\d{2}-\d{2}$', normalized):
+                    logger.info(f"Found Date of Birth via OCR: {normalized} (confidence: {result.confidence:.2f})")
+                    return normalized
 
     return None

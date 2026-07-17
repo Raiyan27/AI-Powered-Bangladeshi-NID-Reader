@@ -23,6 +23,19 @@ _MONTH_FULL_MAP = {
 }
 
 
+_BENGALI_DIGITS_MAP = {
+    "০": "0", "১": "1", "২": "2", "৩": "3", "৪": "4",
+    "৫": "5", "৬": "6", "৭": "7", "৮": "8", "৯": "9",
+}
+
+
+def convert_bengali_digits(text: str | None) -> str | None:
+    """Convert Bengali Unicode digits to standard English ASCII digits."""
+    if not text:
+        return text
+    return "".join(_BENGALI_DIGITS_MAP.get(char, char) for char in text)
+
+
 def normalize_date(date_str: str | None) -> str | None:
     """Normalize date strings to YYYY-MM-DD format.
 
@@ -35,6 +48,7 @@ def normalize_date(date_str: str | None) -> str | None:
     if not date_str:
         return None
 
+    date_str = convert_bengali_digits(date_str)
     date_str = date_str.strip()
 
     # Already in YYYY-MM-DD format
@@ -74,6 +88,7 @@ def normalize_nid_number(nid_str: str | None) -> str | None:
     if not nid_str:
         return None
 
+    nid_str = convert_bengali_digits(nid_str)
     cleaned = re.sub(r"[^\d]", "", nid_str)
     if re.match(r"^\d{10}$|^\d{13}$|^\d{17}$", cleaned):
         return cleaned
