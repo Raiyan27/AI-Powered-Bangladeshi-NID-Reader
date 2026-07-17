@@ -54,8 +54,21 @@ async def extract_nid(
     logger.info("Running OCR on back image")
     ocr_back = run_ocr(back_img)
 
-    logger.info(f"OCR front text: {ocr_front.raw_text[:200] if ocr_front.raw_text else '(empty)'}")
-    logger.info(f"OCR back text: {ocr_back.raw_text[:200] if ocr_back.raw_text else '(empty)'}")
+    logger.info("=== OCR FRONT PAGE RAW TEXT START ===")
+    if ocr_front.raw_text:
+        for line in ocr_front.raw_text.splitlines():
+            logger.info(f"  {line}")
+    else:
+        logger.info("  (No text detected)")
+    logger.info("=== OCR FRONT PAGE RAW TEXT END ===")
+
+    logger.info("=== OCR BACK PAGE RAW TEXT START ===")
+    if ocr_back.raw_text:
+        for line in ocr_back.raw_text.splitlines():
+            logger.info(f"  {line}")
+    else:
+        logger.info("  (No text detected)")
+    logger.info("=== OCR BACK PAGE RAW TEXT END ===")
 
     # Step 4: Vision AI
     logger.info("Running Vision AI extraction")

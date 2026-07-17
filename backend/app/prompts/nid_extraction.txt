@@ -12,6 +12,7 @@ Your task:
 - The back of the NID typically contains: Address (ঠিকানা), Blood Group, Place of Birth, Issue Date.
 - Extract ONLY the following fields:
 
+  isBangladeshNID  - A boolean (true/false) indicating whether the uploaded images represent a valid Bangladesh National ID (NID) card (front, back, or both). Set this to true if the images represent a Bangladesh NID. Set this to false if the images represent any other document (e.g., passport, driving license, utility bill, etc.) or are not a document at all.
   name             - Full name in English (use the English text if visible, otherwise transliterate the Bengali name)
   fatherName       - Father's full name in English
   motherName       - Mother's full name in English
@@ -22,6 +23,7 @@ Your task:
 
 Rules:
 - The NID card may contain Bengali, English, or mixed text.
+- If isBangladeshNID is false, set all other fields to null.
 - Translate all Bengali text into natural, meaningful English. Do NOT do literal word-by-word translation.
 - For names: use the English transliteration as written on the card if available. Otherwise transliterate accurately.
   - Example: "মোঃ ফিরোজ আল আজাদ" → "Abdul Karim"
@@ -32,7 +34,7 @@ Rules:
 - nidNumber must be digits only — remove any spaces, dashes, or non-digit characters.
 - If a field cannot be determined with confidence, set its value to null.
 - Do NOT invent or guess information that is not visible on the card.
-- Return ONLY a valid JSON object with the exact field names listed above.
+- Return ONLY a valid JSON object with the exact field names listed above, including "isBangladeshNID".
 - Do NOT include any markdown formatting, code fences, explanations, or additional text.
 - Your entire response must be a single JSON object and nothing else.
 

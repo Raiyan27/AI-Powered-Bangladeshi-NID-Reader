@@ -7,6 +7,7 @@ import httpx
 from app.core.config import get_settings
 from app.core.logging import logger
 from app.schemas.nid import NIDData
+from app.services.image_service import ImageValidationError
 from app.utils.image_utils import image_to_base64
 
 
@@ -130,6 +131,21 @@ async def extract_with_vision(
 
         nid_dict = json.loads(content)
 
+        # Check if the document is a valid Bangladesh NID card
+        is_nid = nid_dict.get("isBangladeshNID")
+        
+        # If explicitly false, or if it is null/missing and all fields are empty, raise error
+        has_substantive_data = any(
+            nid_dict.get(field) is not None and str(nid_dict.get(field)).strip() != ""
+            for field in ["name", "nidNumber", "dateOfBirth"]
+        )
+        
+        if is_nid is False or (is_nid is None and not has_substantive_data):
+            raise ImageValidationError(
+                code="INVALID_DOCUMENT_TYPE",
+                message="The uploaded image is not a valid Bangladesh National ID (NID) card. Please upload a valid NID image."
+            )
+
         # Only pass known NIDData fields to avoid unexpected key errors
         known_fields = {
             "name", "fatherName", "motherName",
@@ -146,6 +162,8 @@ async def extract_with_vision(
             code="AI_EXTRACTION_FAILED",
             message="AI model returned an unparseable response. Please try again.",
         )
+    except ImageValidationError:
+        raise
     except VisionExtractionError:
         raise
     except Exception as e:

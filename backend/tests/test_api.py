@@ -86,3 +86,27 @@ class TestExtractEndpoint:
         assert "error" in data
         assert "code" in data["error"]
         assert "message" in data["error"]
+
+    @patch("app.services.extraction_service.extract_with_vision", new_callable=AsyncMock)
+    def test_invalid_document_type(self, mock_vision):
+        """If Vision AI determines the document is not an NID, it should return 400 with INVALID_DOCUMENT_TYPE."""
+        from app.services.image_service import ImageValidationError
+        mock_vision.side_effect = ImageValidationError(
+            code="INVALID_DOCUMENT_TYPE",
+            message="The uploaded image is not a valid Bangladesh National ID (NID) card. Please upload a valid NID image."
+        )
+        front_data = _create_test_image()
+        back_data = _create_test_image()
+        response = client.post(
+            "/extract",
+            files={
+                "front": ("front.png", front_data, "image/png"),
+                "back": ("back.png", back_data, "image/png"),
+            },
+        )
+        assert response.status_code == 400
+        data = response.json()
+        assert data["success"] is False
+        assert data["error"]["code"] == "INVALID_DOCUMENT_TYPE"
+        assert "not a valid Bangladesh National ID" in data["error"]["message"]
+

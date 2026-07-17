@@ -70,13 +70,32 @@ export default function Home() {
         body: formData,
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        if (response.status >= 500) {
+          setError({
+            code: "INTERNAL_ERROR",
+            message: `An internal server error occurred (Status ${response.status}). Please try again later.`,
+          });
+        } else {
+          setError({
+            code: "UNKNOWN_ERROR",
+            message: `An unexpected error occurred (Status ${response.status}).`,
+          });
+        }
+        return;
+      }
 
-      if (data.success) {
+      if (response.ok && data.success) {
         setResult(data.data);
         setWarnings(data.warnings || []);
       } else {
-        setError(data.error);
+        setError(data.error || {
+          code: "UNKNOWN_ERROR",
+          message: data.message || "An error occurred during extraction.",
+        });
       }
     } catch {
       setError({

@@ -17,8 +17,10 @@ const ERROR_CODE_LABELS: Record<string, string> = {
   LOW_IMAGE_QUALITY: "Low Image Quality",
   OCR_FAILED: "OCR Failed",
   AI_EXTRACTION_FAILED: "AI Extraction Failed",
+  INVALID_DOCUMENT_TYPE: "Invalid Document Type",
   NETWORK_ERROR: "Network Error",
   INTERNAL_ERROR: "Server Error",
+  UNKNOWN_ERROR: "Unknown Error",
 };
 
 export default function ErrorDisplay({ error, warnings }: ErrorDisplayProps) {
