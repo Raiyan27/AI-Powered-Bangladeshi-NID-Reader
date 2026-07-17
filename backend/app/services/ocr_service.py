@@ -1,3 +1,7 @@
+import os
+os.environ["FLAGS_use_mkldnn"] = "0"
+os.environ["PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT"] = "0"
+
 import numpy as np
 from paddleocr import PaddleOCR
 
@@ -11,6 +15,7 @@ from app.schemas.nid import OCRResult, OCROutput
 # Bengali text extraction is handled by the Vision AI model downstream.
 _ocr_engine: PaddleOCR | None = None
 _ocr_initialization_failed = False
+_ocr_is_v3 = False
 
 
 def get_ocr_engine() -> PaddleOCR | None:
@@ -20,7 +25,7 @@ def get_ocr_engine() -> PaddleOCR | None:
     If the library or its runtime dependencies (e.g. paddlepaddle) are missing,
     it returns None and logs a warning rather than crashing.
     """
-    global _ocr_engine, _ocr_initialization_failed
+    global _ocr_engine, _ocr_initialization_failed, _ocr_is_v3
     if _ocr_initialization_failed:
         return None
 
@@ -37,6 +42,7 @@ def get_ocr_engine() -> PaddleOCR | None:
 
             # Detect PaddleOCR 3.x vs 2.x
             is_v3 = "use_textline_orientation" in params
+            _ocr_is_v3 = is_v3
 
             if is_v3:
                 # PaddleOCR 3.x configuration
@@ -85,7 +91,11 @@ def run_ocr(image: np.ndarray) -> OCROutput:
         return OCROutput()
 
     try:
-        result = engine.ocr(image, cls=True)
+        global _ocr_is_v3
+        if _ocr_is_v3:
+            result = engine.ocr(image)
+        else:
+            result = engine.ocr(image, cls=True)
     except Exception as e:
         logger.error(f"PaddleOCR execution failed: {e}")
         return OCROutput()
@@ -98,28 +108,65 @@ def run_ocr(image: np.ndarray) -> OCROutput:
     ocr_results: list[OCRResult] = []
     total_confidence = 0.0
 
-    for line in result[0]:
-        if not line or len(line) < 2:
-            continue
-        bbox = line[0]
-        text_data = line[1]
+    # Parse results based on PaddleOCR version (v3 dictionary vs v2 list)
+    if isinstance(result[0], dict):
+        res_dict = result[0]
+        rec_texts = res_dict.get("rec_texts", [])
+        rec_scores = res_dict.get("rec_scores", [])
+        rec_polys = res_dict.get("rec_polys", []) or res_dict.get("rec_boxes", [])
 
-        if not text_data or len(text_data) < 2:
-            continue
+        for i in range(len(rec_texts)):
+            text = str(rec_texts[i])
+            confidence = float(rec_scores[i])
 
-        text = str(text_data[0])
-        confidence = float(text_data[1])
+            if i < len(rec_polys):
+                poly = rec_polys[i]
+                try:
+                    if len(poly) == 4 and hasattr(poly[0], "__len__") and len(poly[0]) >= 2:
+                        # Polygon (list of 4 coordinates)
+                        center_x = sum(p[0] for p in poly) / 4.0
+                        center_y = sum(p[1] for p in poly) / 4.0
+                    elif len(poly) == 4:
+                        # Bounding box [x_min, y_min, x_max, y_max]
+                        center_x = (poly[0] + poly[2]) / 2.0
+                        center_y = (poly[1] + poly[3]) / 2.0
+                    else:
+                        center_x, center_y = 0.0, 0.0
+                except Exception:
+                    center_x, center_y = 0.0, 0.0
+            else:
+                center_x, center_y = 0.0, 0.0
 
-        # Compute center of bounding box as position reference
-        center_x = sum(p[0] for p in bbox) / 4
-        center_y = sum(p[1] for p in bbox) / 4
+            ocr_results.append(OCRResult(
+                text=text,
+                confidence=confidence,
+                position=[center_x, center_y],
+            ))
+            total_confidence += confidence
+    else:
+        # Standard PaddleOCR v2 format
+        for line in result[0]:
+            if not line or len(line) < 2:
+                continue
+            bbox = line[0]
+            text_data = line[1]
 
-        ocr_results.append(OCRResult(
-            text=text,
-            confidence=confidence,
-            position=[center_x, center_y],
-        ))
-        total_confidence += confidence
+            if not text_data or len(text_data) < 2:
+                continue
+
+            text = str(text_data[0])
+            confidence = float(text_data[1])
+
+            # Compute center of bounding box as position reference
+            center_x = sum(p[0] for p in bbox) / 4.0
+            center_y = sum(p[1] for p in bbox) / 4.0
+
+            ocr_results.append(OCRResult(
+                text=text,
+                confidence=confidence,
+                position=[center_x, center_y],
+            ))
+            total_confidence += confidence
 
     # Filter results below the confidence threshold
     filtered = [r for r in ocr_results if r.confidence >= settings.ocr.confidence_threshold]
