@@ -23,6 +23,7 @@ interface ApiError {
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function Home() {
+  const [uploadMode, setUploadMode] = useState<"single" | "dual">("dual");
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [backFile, setBackFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -39,12 +40,15 @@ export default function Home() {
     if (!frontFile) {
       setError({
         code: "MISSING_FRONT_IMAGE",
-        message: "Please upload the front side of the NID card.",
+        message:
+          uploadMode === "single"
+            ? "Please upload the NID card image containing both sides."
+            : "Please upload the front side of the NID card.",
       });
       return;
     }
 
-    if (!backFile) {
+    if (uploadMode === "dual" && !backFile) {
       setError({
         code: "MISSING_BACK_IMAGE",
         message: "Please upload the back side of the NID card.",
@@ -57,7 +61,9 @@ export default function Home() {
     try {
       const formData = new FormData();
       formData.append("front", frontFile);
-      formData.append("back", backFile);
+      if (uploadMode === "dual" && backFile) {
+        formData.append("back", backFile);
+      }
 
       const response = await fetch(`${API_URL}/extract`, {
         method: "POST",
@@ -99,7 +105,10 @@ export default function Home() {
     setBackFile(null);
   };
 
-  const canExtract = !loading && !!frontFile && !!backFile;
+  const canExtract =
+    !loading &&
+    !!frontFile &&
+    (uploadMode === "single" || !!backFile);
 
   return (
     <main className="flex-1 flex items-start justify-center px-4 py-10">
@@ -114,8 +123,8 @@ export default function Home() {
             Bangladesh NID Extractor
           </h1>
           <p className="text-gray-500 text-sm max-w-md mx-auto">
-            Upload both sides of your National ID card. Our AI pipeline
-            (OCR + Vision LLM) extracts and structures the information.
+            Upload your NID card to extract structured information. Supports
+            single combined scan images or separate front/back photos.
           </p>
         </div>
 
@@ -136,20 +145,63 @@ export default function Home() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FileUpload
-              id="front-upload"
-              label="Front Side"
-              onFileSelect={setFrontFile}
-              initialFile={frontFile}
-            />
-            <FileUpload
-              id="back-upload"
-              label="Back Side"
-              onFileSelect={setBackFile}
-              initialFile={backFile}
-            />
+          {/* Toggle Tabs */}
+          <div className="flex bg-gray-100 p-1 rounded-lg">
+            <button
+              type="button"
+              onClick={() => {
+                setUploadMode("dual");
+                handleReset();
+              }}
+              className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                uploadMode === "dual"
+                  ? "bg-white text-gray-800 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Two Images (Front & Back)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setUploadMode("single");
+                handleReset();
+              }}
+              className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                uploadMode === "single"
+                  ? "bg-white text-gray-800 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Single Image (Front & Back combined)
+            </button>
           </div>
+
+          {uploadMode === "dual" ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FileUpload
+                id="front-upload"
+                label="Front Side"
+                onFileSelect={setFrontFile}
+                initialFile={frontFile}
+              />
+              <FileUpload
+                id="back-upload"
+                label="Back Side"
+                onFileSelect={setBackFile}
+                initialFile={backFile}
+              />
+            </div>
+          ) : (
+            <div className="w-full">
+              <FileUpload
+                id="combined-upload"
+                label="Combined Scan / Photocopy Image"
+                onFileSelect={setFrontFile}
+                initialFile={frontFile}
+              />
+            </div>
+          )}
 
           <button
             id="extract-button"
@@ -189,6 +241,7 @@ export default function Home() {
             )}
           </button>
         </div>
+
 
         {/* How it works */}
         {!result && !error && !loading && (

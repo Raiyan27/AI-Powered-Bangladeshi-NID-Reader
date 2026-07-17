@@ -1,10 +1,12 @@
 """Tests for API endpoints."""
 import io
+from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.main import app
+
 
 
 client = TestClient(app)
@@ -39,13 +41,21 @@ class TestExtractEndpoint:
         )
         assert response.status_code == 422 or response.status_code == 400
 
-    def test_missing_back_image(self):
+    @patch("app.services.extraction_service.extract_with_vision", new_callable=AsyncMock)
+    def test_missing_back_image(self, mock_vision):
+        """Omitting the back image is now allowed and treated as a single NID image upload."""
+        from app.schemas.nid import NIDData
+        mock_vision.return_value = NIDData(name="Test User")
         front_data = _create_test_image()
         response = client.post(
             "/extract",
             files={"front": ("front.png", front_data, "image/png")},
         )
-        assert response.status_code == 422 or response.status_code == 400
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["name"] == "Test User"
+
 
     def test_invalid_file_format(self):
         front_data = _create_test_image()

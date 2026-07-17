@@ -166,3 +166,24 @@ class TestNIDSampleIntegration:
         assert data["success"] is True
         # Date must be normalized to YYYY-MM-DD
         assert data["data"]["dateOfBirth"] == "1998-01-15"
+
+    @patch("app.services.extraction_service.extract_with_vision", new_callable=AsyncMock)
+    def test_single_image_extract_endpoint(self, mock_vision):
+        """Test endpoint with a single combined NID image without providing the 'back' file."""
+        mock_vision.return_value = _mock_vision_result()
+
+        combined_path = SAMPLES_DIR / "NID.jpg"
+        combined_bytes = _load_image_bytes(combined_path)
+
+        response = client.post(
+            "/extract",
+            files={
+                "front": ("NID.jpg", combined_bytes, "image/jpeg"),
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["nidNumber"] == "1234567890123"
+
