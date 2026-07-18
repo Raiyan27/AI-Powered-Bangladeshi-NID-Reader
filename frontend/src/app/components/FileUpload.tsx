@@ -27,6 +27,8 @@ export default function FileUpload({
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
 
   // Reset when parent clears the file
   useEffect(() => {
@@ -36,6 +38,8 @@ export default function FileUpload({
       if (fileInputRef.current) fileInputRef.current.value = "";
       if (cameraInputRef.current) cameraInputRef.current.value = "";
       stopCamera();
+      setDevices([]);
+      setSelectedDeviceId("");
     }
   }, [initialFile]);
 
@@ -93,39 +97,107 @@ export default function FileUpload({
     onFileSelect(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     stopCamera();
+    setDevices([]);
+    setSelectedDeviceId("");
   };
 
   // --- Camera helpers ---
 
-  const startCamera = async () => {
+  const startCamera = async (deviceId?: string) => {
     setCameraError(null);
+
+    // Stop the existing camera first before opening a new stream to prevent locks
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraError(
+        "Camera access is not supported by your browser or environment (requires HTTPS)."
+      );
+      return;
+    }
+
     try {
       // Detect touch device — phones and tablets have coarse pointer and touch points.
       // Desktops typically have no touch points and a fine/mouse pointer.
       const isMobileOrTablet =
+        /Mobi|Android|iPhone|iPad|Tablet|Nexus|PlayBook|Silk/i.test(navigator.userAgent) ||
         window.matchMedia("(pointer: coarse)").matches ||
         navigator.maxTouchPoints > 0;
 
-      // Mobile/tablet → prefer rear camera for NID scanning.
-      // Desktop → no facingMode constraint; browser uses the default webcam.
-      const videoConstraints: MediaTrackConstraints = isMobileOrTablet
-        ? { facingMode: { ideal: "environment" } }
-        : true as unknown as MediaTrackConstraints;
+      let stream: MediaStream;
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: videoConstraints,
-      });
+      if (isMobileOrTablet) {
+        // Mobile/Tablet requirement: Use default camera, prefer rear-facing, fall back to front-facing
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } },
+          });
+        } catch (err) {
+          console.warn("Ideal environment camera failed, falling back to front camera", err);
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: "user" },
+            });
+          } catch (err2) {
+            console.warn("Front camera failed, falling back to default camera", err2);
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+            });
+          }
+        }
+      } else {
+        // Desktop/Laptop requirement: Use first available camera by default, do not force facingMode.
+        // If a specific deviceId is selected, use it. Otherwise, request default video: true.
+        const videoConstraints = deviceId
+          ? { deviceId: { exact: deviceId } }
+          : true;
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+        });
+      }
+
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
       setCameraActive(true);
-    } catch {
+
+      // Enumerate available video inputs to build the list
+      try {
+        const allDevices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = allDevices.filter((d) => d.kind === "videoinput");
+        setDevices(videoDevices);
+
+        // Find the active device id
+        const activeTrack = stream.getVideoTracks()[0];
+        const activeSettings = activeTrack?.getSettings();
+        const activeDeviceId = activeSettings?.deviceId;
+
+        if (activeDeviceId) {
+          setSelectedDeviceId(activeDeviceId);
+        } else if (videoDevices.length > 0 && !selectedDeviceId) {
+          setSelectedDeviceId(videoDevices[0].deviceId);
+        }
+      } catch (enumErr) {
+        console.warn("Failed to enumerate media devices:", enumErr);
+      }
+
+    } catch (err) {
+      console.error("Camera start failed:", err);
       setCameraError(
         "Camera access denied or not available. Please allow camera access or use file upload."
       );
     }
+  };
+
+  const handleCameraChange = (deviceId: string) => {
+    setSelectedDeviceId(deviceId);
+    startCamera(deviceId);
   };
 
   const capturePhoto = () => {
@@ -253,6 +325,22 @@ export default function FileUpload({
                 playsInline
                 muted
               />
+              {/* Camera switcher dropdown */}
+              {devices.length > 1 && (
+                <div className="absolute top-2 right-2 max-w-[180px] bg-black/60 backdrop-blur-sm rounded px-1.5 py-0.5 text-[10px] text-white z-10 border border-white/10">
+                  <select
+                    value={selectedDeviceId}
+                    onChange={(e) => handleCameraChange(e.target.value)}
+                    className="bg-transparent text-white border-none outline-none w-full cursor-pointer pr-4 py-0.5"
+                  >
+                    {devices.map((device, idx) => (
+                      <option key={device.deviceId} value={device.deviceId} className="bg-gray-800 text-white">
+                        {device.label || `Camera ${idx + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {/* Capture button overlay */}
               <div className="absolute bottom-2 left-0 right-0 flex justify-center">
                 <button
