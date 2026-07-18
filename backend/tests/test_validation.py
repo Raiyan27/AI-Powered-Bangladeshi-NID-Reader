@@ -46,8 +46,7 @@ class TestNIDValidation:
             motherName="Amena Begum",
             dateOfBirth="1998-01-15",
             nidNumber="1234567890123",
-            presentAddress="Dhaka, Bangladesh",
-            permanentAddress="Cumilla, Bangladesh",
+            address="Dhaka, Bangladesh",
         )
         warnings = validate_extraction(data)
         assert len(warnings) == 0
@@ -58,6 +57,7 @@ class TestNIDValidation:
         assert any("Father's name" in w for w in warnings)
         assert any("Mother's name" in w for w in warnings)
         assert any("NID number" in w for w in warnings)
+        assert any("Address" in w for w in warnings)
 
     def test_invalid_nid_number_format(self):
         data = NIDData(name="Test", nidNumber="12345")  # Invalid: not 10, 13, or 17 digits
@@ -87,6 +87,21 @@ class TestNIDValidation:
         assert any("Name" in w and "could not be detected" in w for w in warnings)
         assert any("Father's name" in w for w in warnings)
 
+    def test_present_and_permanent_address_optional_no_warning(self):
+        """presentAddress and permanentAddress are optional — no warning when absent."""
+        data = NIDData(
+            name="Md Rahim",
+            fatherName="Abdul Karim",
+            motherName="Amena Begum",
+            dateOfBirth="1998-01-15",
+            nidNumber="1234567890",
+            address="Dhaka, Bangladesh",
+            presentAddress=None,
+            permanentAddress=None,
+        )
+        warnings = validate_extraction(data)
+        assert not any("present" in w.lower() or "permanent" in w.lower() for w in warnings)
+
     def test_date_year_out_of_range(self):
         """Year outside 1900-2030 should generate a warning."""
         data = NIDData(name="Test", dateOfBirth="1800-01-01")
@@ -106,8 +121,7 @@ class TestNIDValidation:
             motherName="Amena Begum",
             dateOfBirth="1998-01-15",
             nidNumber="1234567890",
-            presentAddress="Dhaka",
-            permanentAddress="Dhaka",
+            address="Dhaka",
             spouseName=None,
         )
         warnings = validate_extraction(data)

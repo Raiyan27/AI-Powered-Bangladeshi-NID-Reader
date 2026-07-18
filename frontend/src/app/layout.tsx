@@ -51,7 +51,7 @@ export default function RootLayout({
         <footer className="border-t border-gray-200 bg-white mt-auto">
           <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
             <p className="text-xs text-gray-400">
-              Bangladesh NID Extractor · IDLC TAP Project
+              Bangladesh NID Extractor
             </p>
             <p className="text-xs text-gray-400">
               Powered by Vision AI via OpenRouter

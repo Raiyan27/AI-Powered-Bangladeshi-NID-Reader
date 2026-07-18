@@ -15,8 +15,19 @@ Analyse both images visually and extract the following fields:
   spouseName       — Spouse's full name in English. null if not present. Do NOT confuse with father's or mother's name.
   dateOfBirth      — Date of birth strictly in YYYY-MM-DD format (e.g. 1998-01-15). null if not readable.
   nidNumber        — The NID / ID number as a digit-only string (e.g. "1234567890123"). Remove all spaces, dashes, and non-digit characters. null if not found.
-  presentAddress   — Present / current address in English. Translate Bengali location names accurately. null if not readable.
-  permanentAddress — Permanent address in English. If identical to present address, repeat it. null if not readable.
+  address          — The primary address found on the card, in English. This is MANDATORY if any address exists. If the card shows only one address, put it here.
+  presentAddress   — Present / current address in English ONLY if the card explicitly labels it as present address (বর্তমান ঠিকানা). null if the card does not explicitly distinguish present vs permanent address.
+  permanentAddress — Permanent address in English ONLY if the card explicitly labels it as permanent address (স্থায়ী ঠিকানা). null if the card does not explicitly distinguish present vs permanent address.
+
+---
+
+ADDRESS EXTRACTION RULES
+
+- If the card shows ONE address (unlabelled or simply "ঠিকানা"): set `address` to that value. Set `presentAddress` and `permanentAddress` to null.
+- If the card shows TWO explicitly labelled addresses (বর্তমান ঠিকানা and স্থায়ী ঠিকানা): set `presentAddress` and `permanentAddress` accordingly. Also set `address` to the same value as `presentAddress` (primary).
+- Never set `presentAddress` or `permanentAddress` to a value that is not explicitly labelled as such on the card.
+- Translate Bengali location names to readable English. Preserve location names accurately.
+  - Example: "বাসা/হোল্ডিং: ২২ডি, রোড ১০৬, গুলশান" → "Dhaka, Bangladesh"
 
 ---
 
@@ -26,11 +37,11 @@ Bangladesh NID cards exist in two main formats:
 
 Old format (laminated card):
   - Front: Name in Bengali and English, Father's name, Mother's name, Date of Birth, NID Number (10 digits)
-  - Back: Address information
+  - Back: Address information (usually one address field)
 
 New format (smart card, blue):
   - Front: Name in Bengali and English, Father's name, Mother's name, optional Spouse name, Date of Birth, NID Number (17 digits or 10 digits)
-  - Back: Present address, Permanent address, Blood Group, Place of Birth, Issue Date
+  - Back: Present address (বর্তমান ঠিকানা), Permanent address (স্থায়ী ঠিকানা), Blood Group, Place of Birth, Issue Date
 
 ---
 
@@ -44,12 +55,10 @@ EXTRACTION RULES
 4. Do NOT mix up name fields — spouseName is a separate field from fatherName and motherName.
 5. dateOfBirth must always be YYYY-MM-DD. Convert from any format (e.g. "15 Jan 1998" → "1998-01-15").
 6. nidNumber: digits only — strip spaces, dashes, and any non-digit characters.
-7. Addresses: translate Bengali to readable English. Preserve location names accurately.
-   - Example: "বাসা/হোল্ডিং: ২২ডি, রোড ১০৬, গুলশান" → "Dhaka, Bangladesh"
-8. If a field is partially visible, unreadable, obscured, or genuinely absent, set it to null. Never guess.
-9. Handle image quality issues gracefully: glare, blur, shadow, perspective distortion, and partial crops should not cause hallucinations.
-10. The card may be rotated — read the content regardless of orientation.
-11. Bengali digits (০১২৩৪৫৬৭৮৯) must be converted to ASCII digits (0123456789) in nidNumber and dateOfBirth.
+7. If a field is partially visible, unreadable, obscured, or genuinely absent, set it to null. Never guess.
+8. Handle image quality issues gracefully: glare, blur, shadow, perspective distortion, and partial crops should not cause hallucinations.
+9. The card may be rotated — read the content regardless of orientation.
+10. Bengali digits (০১২৩৪৫৬৭৮৯) must be converted to ASCII digits (0123456789) in nidNumber and dateOfBirth.
 
 ---
 
@@ -65,6 +74,7 @@ Return ONLY a single valid JSON object with exactly these keys:
   "spouseName": null,
   "dateOfBirth": "YYYY-MM-DD",
   "nidNumber": "...",
+  "address": "...",
   "presentAddress": "...",
   "permanentAddress": "..."
 }

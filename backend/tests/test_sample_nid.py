@@ -27,6 +27,7 @@ EXPECTED_DATA = {
     "spouseName": None,
     "dateOfBirth": "1998-01-15",
     "nidNumber": "1234567890123",
+    "address": "Dhaka, Bangladesh",
     "presentAddress": "Dhaka, Bangladesh",
     "permanentAddress": "Dhaka, Bangladesh",
 }
@@ -88,7 +89,7 @@ class TestNIDSampleIntegration:
         )
         result = response.json()["data"]
         for field in ["name", "fatherName", "motherName", "spouseName", "dateOfBirth",
-                      "nidNumber", "presentAddress", "permanentAddress"]:
+                      "nidNumber", "address", "presentAddress", "permanentAddress"]:
             assert field in result, f"Missing field: {field}"
 
     @patch("app.services.extraction_service.extract_with_vision", new_callable=AsyncMock)
@@ -113,8 +114,7 @@ class TestNIDSampleIntegration:
             motherName="Amena Begum",
             dateOfBirth="15 Jan 1998",  # Non-ISO format from Vision AI
             nidNumber="1234567890123",
-            presentAddress="Dhaka, Bangladesh",
-            permanentAddress="Dhaka, Bangladesh",
+            address="Dhaka, Bangladesh",
         )
 
         response = client.post(

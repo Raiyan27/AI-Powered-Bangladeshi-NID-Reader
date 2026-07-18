@@ -9,5 +9,6 @@ class NIDData(BaseModel):
     spouseName: str | None = None
     dateOfBirth: str | None = None
     nidNumber: str | None = None
+    address: str | None = None
     presentAddress: str | None = None
     permanentAddress: str | None = None

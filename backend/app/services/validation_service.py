@@ -3,18 +3,19 @@ import re
 from app.core.logging import logger
 from app.schemas.nid import NIDData
 
-# Fields required on every NID — missing ones generate warnings.
+# Required fields — missing ones generate warnings.
+# presentAddress and permanentAddress are optional (only present on new-format smart cards).
 _REQUIRED_FIELDS = {
     "name": "Name",
     "fatherName": "Father's name",
     "motherName": "Mother's name",
     "dateOfBirth": "Date of birth",
     "nidNumber": "NID number",
-    "presentAddress": "Present address",
-    "permanentAddress": "Permanent address",
+    "address": "Address",
 }
 
-# spouseName is optional — not warned when absent.
+# Optional fields — not warned when absent.
+# spouseName, presentAddress, permanentAddress
 
 
 def validate_extraction(data: NIDData) -> list[str]:

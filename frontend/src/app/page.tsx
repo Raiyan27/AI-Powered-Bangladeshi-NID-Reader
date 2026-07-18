@@ -9,8 +9,10 @@ interface NIDData {
   name: string | null;
   fatherName: string | null;
   motherName: string | null;
+  spouseName: string | null;
   dateOfBirth: string | null;
   nidNumber: string | null;
+  address: string | null;
   presentAddress: string | null;
   permanentAddress: string | null;
 }

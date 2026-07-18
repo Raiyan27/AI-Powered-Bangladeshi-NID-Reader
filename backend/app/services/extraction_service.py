@@ -63,6 +63,7 @@ async def extract_nid(
         spouseName=normalize_name(vision_result.spouseName),
         dateOfBirth=normalize_date(vision_result.dateOfBirth),
         nidNumber=normalize_nid_number(vision_result.nidNumber),
+        address=normalize_address(vision_result.address),
         presentAddress=normalize_address(vision_result.presentAddress),
         permanentAddress=normalize_address(vision_result.permanentAddress),
     )

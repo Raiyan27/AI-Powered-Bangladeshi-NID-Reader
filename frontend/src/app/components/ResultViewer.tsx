@@ -4,8 +4,10 @@ interface NIDData {
   name: string | null;
   fatherName: string | null;
   motherName: string | null;
+  spouseName: string | null;
   dateOfBirth: string | null;
   nidNumber: string | null;
+  address: string | null;
   presentAddress: string | null;
   permanentAddress: string | null;
 }
@@ -16,14 +18,21 @@ interface ResultViewerProps {
   copied?: boolean;
 }
 
-const FIELD_LABELS: { key: keyof NIDData; label: string; icon: string }[] = [
+// Core fields always shown
+const CORE_FIELDS: { key: keyof NIDData; label: string; icon: string }[] = [
   { key: "name", label: "Full Name", icon: "👤" },
   { key: "fatherName", label: "Father's Name", icon: "👨" },
   { key: "motherName", label: "Mother's Name", icon: "👩" },
+  { key: "spouseName", label: "Spouse's Name", icon: "💍" },
   { key: "dateOfBirth", label: "Date of Birth", icon: "🎂" },
   { key: "nidNumber", label: "NID Number", icon: "🪪" },
-  { key: "presentAddress", label: "Present Address", icon: "📍" },
-  { key: "permanentAddress", label: "Permanent Address", icon: "🏠" },
+];
+
+// Address fields — rendered with special logic
+const ADDRESS_FIELDS: { key: keyof NIDData; label: string }[] = [
+  { key: "address", label: "Address" },
+  { key: "presentAddress", label: "Present Address" },
+  { key: "permanentAddress", label: "Permanent Address" },
 ];
 
 export default function ResultViewer({
@@ -31,8 +40,15 @@ export default function ResultViewer({
   onCopyJson,
   copied = false,
 }: ResultViewerProps) {
-  const detectedCount = Object.values(data).filter(Boolean).length;
-  const totalCount = FIELD_LABELS.length;
+  // Count non-null, non-empty values across all fields
+  const allValues = Object.values(data).filter(
+    (v) => v !== null && v !== undefined && String(v).trim() !== ""
+  );
+  const detectedCount = allValues.length;
+  const totalCount = CORE_FIELDS.length + 1; // +1 for address group
+
+  // Determine which address fields to show
+  const hasPresentOrPermanent = data.presentAddress || data.permanentAddress;
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white">
@@ -40,9 +56,7 @@ export default function ResultViewer({
       <div className="flex items-center justify-between px-5 py-4 bg-gray-50 border-b border-gray-200">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-green-500" />
-          <h2 className="text-sm font-semibold text-gray-800">
-            Extracted Information
-          </h2>
+          <h2 className="text-sm font-semibold text-gray-800">Extracted Information</h2>
           <span className="text-xs text-gray-400">
             ({detectedCount}/{totalCount} fields)
           </span>
@@ -62,26 +76,57 @@ export default function ResultViewer({
 
       {/* Fields */}
       <div className="divide-y divide-gray-100">
-        {FIELD_LABELS.map(({ key, label, icon }) => {
+        {/* Core fields */}
+        {CORE_FIELDS.map(({ key, label, icon }) => {
           const value = data[key];
+          // Skip optional fields that are null
+          if ((key === "spouseName") && !value) return null;
           return (
             <div key={key} className="flex items-start gap-3 px-5 py-3.5">
               <span className="text-base mt-0.5 shrink-0">{icon}</span>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-gray-500 mb-0.5">
-                  {label}
-                </p>
-                <p
-                  className={`text-sm break-words ${
-                    value ? "text-gray-900 font-medium" : "text-gray-400 italic"
-                  }`}
-                >
+                <p className="text-xs font-medium text-gray-500 mb-0.5">{label}</p>
+                <p className={`text-sm break-words ${value ? "text-gray-900 font-medium" : "text-gray-400 italic"}`}>
                   {value || "Not detected"}
                 </p>
               </div>
             </div>
           );
         })}
+
+        {/* Address block */}
+        {hasPresentOrPermanent ? (
+          /* Smart card: show present + permanent separately */
+          <>
+            {ADDRESS_FIELDS.filter((f) => f.key !== "address").map(({ key, label }) => {
+              const value = data[key];
+              return (
+                <div key={key} className="flex items-start gap-3 px-5 py-3.5">
+                  <span className="text-base mt-0.5 shrink-0">
+                    {key === "presentAddress" ? "📍" : "🏠"}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-gray-500 mb-0.5">{label}</p>
+                    <p className={`text-sm break-words ${value ? "text-gray-900 font-medium" : "text-gray-400 italic"}`}>
+                      {value || "Not detected"}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        ) : (
+          /* Old card / single address */
+          <div className="flex items-start gap-3 px-5 py-3.5">
+            <span className="text-base mt-0.5 shrink-0">📍</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-gray-500 mb-0.5">Address</p>
+              <p className={`text-sm break-words ${data.address ? "text-gray-900 font-medium" : "text-gray-400 italic"}`}>
+                {data.address || "Not detected"}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Raw JSON */}
