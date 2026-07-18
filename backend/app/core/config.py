@@ -63,6 +63,7 @@ class Settings(BaseModel):
     # Secrets from environment variables
     openrouter_api_key: str = ""
     openrouter_model: str = ""
+    app_env: str = "dev"
 
     @property
     def model(self) -> str:
@@ -97,13 +98,28 @@ def get_settings() -> Settings:
         with open(config_path, "r", encoding="utf-8") as f:
             config_data = yaml.safe_load(f) or {}
 
+    app_env = os.getenv("APP_ENV", "dev").strip().lower()
+    if app_env not in ("prod", "dev"):
+        app_env = "dev"
+
+    backend_config = BackendConfig(**config_data.get("backend", {}))
+    if app_env == "prod":
+        prod_origins = [
+            "https://81t5j6p1-3000.asse.devtunnels.ms",
+            "https://81t5j6p1-3000.asse.devtunnels.ms/",
+        ]
+        for origin in prod_origins:
+            if origin not in backend_config.cors_origins:
+                backend_config.cors_origins.append(origin)
+
     settings = Settings(
         app=AppConfig(**config_data.get("app", {})),
-        backend=BackendConfig(**config_data.get("backend", {})),
+        backend=backend_config,
         vision=VisionConfig(**config_data.get("vision", {})),
         frontend=FrontendConfig(**config_data.get("frontend", {})),
         openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
         openrouter_model=os.getenv("OPENROUTER_MODEL", ""),
+        app_env=app_env,
     )
 
     return settings
