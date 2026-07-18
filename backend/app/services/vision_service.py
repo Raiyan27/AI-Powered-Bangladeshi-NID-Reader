@@ -1,5 +1,7 @@
+import asyncio
 import json
 import re
+import uuid
 from pathlib import Path
 
 import httpx
@@ -12,15 +14,15 @@ from app.utils.image_utils import image_to_base64
 
 
 class VisionExtractionError(Exception):
-    """Raised when Vision AI extraction fails."""
+    """Raised when Vision AI extraction fails unrecoverably."""
     def __init__(self, code: str, message: str):
         self.code = code
         self.message = message
         super().__init__(message)
 
 
-def _load_prompt_template() -> str:
-    """Load the NID extraction prompt template from file."""
+def _load_prompt() -> str:
+    """Load the NID extraction prompt from file."""
     prompt_path = Path(__file__).parent.parent / "prompts" / "nid_extraction.txt"
     return prompt_path.read_text(encoding="utf-8")
 
@@ -32,25 +34,19 @@ def _clean_json_response(content: str) -> str:
     instructions not to. This strips those fences defensively.
     """
     content = content.strip()
-
-    # Remove ```json ... ``` or ``` ... ``` fences
     content = re.sub(r"^```(?:json)?\s*", "", content)
     content = re.sub(r"\s*```$", "", content)
-    content = content.strip()
-
-    return content
+    return content.strip()
 
 
 async def extract_with_vision(
     front_image_bytes: bytes,
     back_image_bytes: bytes,
-    front_ocr_text: str,
-    back_ocr_text: str,
 ) -> NIDData:
-    """Send images + OCR text to OpenRouter Vision API and extract NID data.
+    """Send NID card images to the OpenRouter Vision API and return extracted data.
 
-    Uses the configured model to analyze both NID card sides and return
-    structured extraction results.
+    Implements retry with exponential backoff for transient failures (5xx, 429,
+    timeouts). Raises VisionExtractionError on permanent failure after all retries.
     """
     settings = get_settings()
 
@@ -60,16 +56,10 @@ async def extract_with_vision(
             message="OpenRouter API key is not configured.",
         )
 
-    # Build prompt with OCR context
-    prompt_template = _load_prompt_template()
-    prompt = prompt_template.format(
-        front_ocr_text=front_ocr_text or "(No text detected by OCR)",
-        back_ocr_text=back_ocr_text or "(No text detected by OCR)",
-    )
-
-    # Encode images to base64 for the multimodal API
+    prompt = _load_prompt()
     front_b64 = image_to_base64(front_image_bytes)
     back_b64 = image_to_base64(back_image_bytes)
+    request_id = uuid.uuid4().hex[:12]
 
     payload = {
         "model": settings.model,
@@ -82,15 +72,11 @@ async def extract_with_vision(
                     {"type": "text", "text": prompt},
                     {
                         "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/png;base64,{front_b64}",
-                        },
+                        "image_url": {"url": f"data:image/jpeg;base64,{front_b64}"},
                     },
                     {
                         "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/png;base64,{back_b64}",
-                        },
+                        "image_url": {"url": f"data:image/jpeg;base64,{back_b64}"},
                     },
                 ],
             }
@@ -102,73 +88,121 @@ async def extract_with_vision(
         "Content-Type": "application/json",
         "HTTP-Referer": "https://nid-extractor.local",
         "X-Title": "Bangladesh NID Extractor",
+        "X-Request-Id": request_id,
     }
 
-    logger.info(f"Sending Vision AI request to OpenRouter (model: {settings.model})")
+    logger.info(
+        f"Vision AI request started (id={request_id}, model={settings.model}, "
+        f"attempts_allowed={settings.vision.retry_attempts})"
+    )
+
+    last_error: Exception | None = None
+
+    for attempt in range(1, settings.vision.retry_attempts + 1):
+        try:
+            raw_content = await _call_api(payload, headers, settings.vision.timeout_s, request_id, attempt)
+            return _parse_response(raw_content, request_id)
+
+        except VisionExtractionError:
+            raise  # Permanent errors — do not retry
+
+        except ImageValidationError:
+            raise  # Non-NID document — do not retry
+
+        except (httpx.TimeoutException, httpx.NetworkError) as e:
+            last_error = e
+            logger.warning(f"[{request_id}] Attempt {attempt} failed (network/timeout): {e}")
+
+        except _RetryableError as e:
+            last_error = e
+            logger.warning(f"[{request_id}] Attempt {attempt} failed (retryable {e.status_code}): {e.message}")
+
+        if attempt < settings.vision.retry_attempts:
+            delay = settings.vision.retry_delay_s * (2 ** (attempt - 1))  # Exponential backoff
+            logger.info(f"[{request_id}] Retrying in {delay:.1f}s (attempt {attempt + 1}/{settings.vision.retry_attempts})")
+            await asyncio.sleep(delay)
+
+    logger.error(f"[{request_id}] All {settings.vision.retry_attempts} attempts exhausted. Last error: {last_error}")
+    raise VisionExtractionError(
+        code="AI_EXTRACTION_FAILED",
+        message="AI extraction failed after multiple retries. Please try again later.",
+    )
+
+
+class _RetryableError(Exception):
+    """Internal signal for retryable HTTP errors."""
+    def __init__(self, status_code: int, message: str):
+        self.status_code = status_code
+        self.message = message
+        super().__init__(message)
+
+
+async def _call_api(payload: dict, headers: dict, timeout_s: float, request_id: str, attempt: int) -> str:
+    """Perform a single HTTP call to OpenRouter. Returns raw response content string."""
+    timeout = httpx.Timeout(connect=10.0, read=timeout_s, write=30.0, pool=5.0)
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            json=payload,
+            headers=headers,
+        )
+
+    logger.info(f"[{request_id}] Attempt {attempt}: HTTP {response.status_code}")
+
+    if response.status_code == 200:
+        data = response.json()
+        raw_content: str = data["choices"][0]["message"]["content"]
+        logger.debug(f"[{request_id}] Raw response preview: {raw_content[:200]}")
+        return raw_content
+
+    if response.status_code == 429:
+        raise _RetryableError(429, "Rate limit reached")
+
+    if response.status_code >= 500:
+        raise _RetryableError(response.status_code, f"Server error: {response.text[:200]}")
+
+    # 4xx errors other than 429 are permanent
+    logger.error(f"[{request_id}] Permanent API error {response.status_code}: {response.text[:300]}")
+    raise VisionExtractionError(
+        code="AI_EXTRACTION_FAILED",
+        message="AI extraction service returned an error. Please check your API key and model configuration.",
+    )
+
+
+def _parse_response(raw_content: str, request_id: str) -> NIDData:
+    """Parse the Vision AI JSON response into NIDData."""
+    content = _clean_json_response(raw_content)
 
     try:
-        async with httpx.AsyncClient(timeout=90.0) as client:
-            response = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                json=payload,
-                headers=headers,
-            )
-
-        if response.status_code != 200:
-            logger.error(f"OpenRouter API error: {response.status_code} - {response.text[:500]}")
-            raise VisionExtractionError(
-                code="AI_EXTRACTION_FAILED",
-                message="AI extraction service returned an error. Please try again.",
-            )
-
-        response_data = response.json()
-        raw_content = response_data["choices"][0]["message"]["content"]
-
-        logger.info("Vision AI response received, parsing JSON")
-        logger.debug(f"Raw Vision AI response: {raw_content[:300]}")
-
-        content = _clean_json_response(raw_content)
-
         nid_dict = json.loads(content)
-
-        # Check if the document is a valid Bangladesh NID card
-        is_nid = nid_dict.get("isBangladeshNID")
-        
-        # If explicitly false, or if it is null/missing and all fields are empty, raise error
-        has_substantive_data = any(
-            nid_dict.get(field) is not None and str(nid_dict.get(field)).strip() != ""
-            for field in ["name", "nidNumber", "dateOfBirth"]
-        )
-        
-        if is_nid is False or (is_nid is None and not has_substantive_data):
-            raise ImageValidationError(
-                code="INVALID_DOCUMENT_TYPE",
-                message="The uploaded image is not a valid Bangladesh National ID (NID) card. Please upload a valid NID image."
-            )
-
-        # Only pass known NIDData fields to avoid unexpected key errors
-        known_fields = {
-            "name", "fatherName", "motherName",
-            "dateOfBirth", "nidNumber", "presentAddress", "permanentAddress",
-        }
-        filtered = {k: v for k, v in nid_dict.items() if k in known_fields}
-
-        return NIDData(**filtered)
-
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse Vision AI response as JSON: {e}")
-        logger.error(f"Unparseable content: {raw_content[:500] if 'raw_content' in dir() else '(unavailable)'}")
+        logger.error(f"[{request_id}] JSON parse error: {e}. Content: {content[:300]}")
         raise VisionExtractionError(
             code="AI_EXTRACTION_FAILED",
             message="AI model returned an unparseable response. Please try again.",
         )
-    except ImageValidationError:
-        raise
-    except VisionExtractionError:
-        raise
-    except Exception as e:
-        logger.error(f"Vision AI extraction failed: {e}", exc_info=True)
-        raise VisionExtractionError(
-            code="AI_EXTRACTION_FAILED",
-            message="AI extraction failed. Please try again.",
+
+    # Validate document type
+    is_nid = nid_dict.get("isBangladeshNID")
+    has_data = any(
+        nid_dict.get(f) not in (None, "")
+        for f in ["name", "nidNumber", "dateOfBirth"]
+    )
+
+    if is_nid is False or (is_nid is None and not has_data):
+        raise ImageValidationError(
+            code="INVALID_DOCUMENT_TYPE",
+            message=(
+                "The uploaded image is not a valid Bangladesh National ID (NID) card. "
+                "Please upload a valid NID image."
+            ),
         )
+
+    known_fields = {
+        "name", "fatherName", "motherName", "spouseName",
+        "dateOfBirth", "nidNumber", "presentAddress", "permanentAddress",
+    }
+    filtered = {k: v for k, v in nid_dict.items() if k in known_fields}
+    logger.info(f"[{request_id}] Parsed fields: {list(k for k, v in filtered.items() if v is not None)}")
+    return NIDData(**filtered)

@@ -1,12 +1,12 @@
 """Tests for API endpoints."""
 import io
 from unittest.mock import AsyncMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.main import app
-
 
 
 client = TestClient(app)
@@ -26,8 +26,7 @@ class TestHealthEndpoint:
     def test_health_returns_ok(self):
         response = client.get("/health")
         assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "ok"
+        assert response.json()["status"] == "ok"
 
 
 class TestExtractEndpoint:
@@ -39,11 +38,11 @@ class TestExtractEndpoint:
             "/extract",
             files={"back": ("back.png", back_data, "image/png")},
         )
-        assert response.status_code == 422 or response.status_code == 400
+        assert response.status_code in (422, 400)
 
     @patch("app.services.extraction_service.extract_with_vision", new_callable=AsyncMock)
-    def test_missing_back_image(self, mock_vision):
-        """Omitting the back image is now allowed and treated as a single NID image upload."""
+    def test_missing_back_image_auto_split(self, mock_vision):
+        """Omitting the back image is allowed — treated as a combined NID image."""
         from app.schemas.nid import NIDData
         mock_vision.return_value = NIDData(name="Test User")
         front_data = _create_test_image()
@@ -55,7 +54,6 @@ class TestExtractEndpoint:
         data = response.json()
         assert data["success"] is True
         assert data["data"]["name"] == "Test User"
-
 
     def test_invalid_file_format(self):
         front_data = _create_test_image()
@@ -89,11 +87,11 @@ class TestExtractEndpoint:
 
     @patch("app.services.extraction_service.extract_with_vision", new_callable=AsyncMock)
     def test_invalid_document_type(self, mock_vision):
-        """If Vision AI determines the document is not an NID, it should return 400 with INVALID_DOCUMENT_TYPE."""
+        """Vision AI detecting a non-NID document returns 400 with INVALID_DOCUMENT_TYPE."""
         from app.services.image_service import ImageValidationError
         mock_vision.side_effect = ImageValidationError(
             code="INVALID_DOCUMENT_TYPE",
-            message="The uploaded image is not a valid Bangladesh National ID (NID) card. Please upload a valid NID image."
+            message="The uploaded image is not a valid Bangladesh National ID (NID) card.",
         )
         front_data = _create_test_image()
         back_data = _create_test_image()
@@ -108,5 +106,54 @@ class TestExtractEndpoint:
         data = response.json()
         assert data["success"] is False
         assert data["error"]["code"] == "INVALID_DOCUMENT_TYPE"
-        assert "not a valid Bangladesh National ID" in data["error"]["message"]
 
+    @patch("app.services.extraction_service.extract_with_vision", new_callable=AsyncMock)
+    def test_vision_api_failure_returns_500(self, mock_vision):
+        """Vision API permanent failure returns 500 with AI_EXTRACTION_FAILED."""
+        from app.services.vision_service import VisionExtractionError
+        mock_vision.side_effect = VisionExtractionError(
+            code="AI_EXTRACTION_FAILED",
+            message="AI extraction service returned an error.",
+        )
+        front_data = _create_test_image()
+        back_data = _create_test_image()
+        response = client.post(
+            "/extract",
+            files={
+                "front": ("front.png", front_data, "image/png"),
+                "back": ("back.png", back_data, "image/png"),
+            },
+        )
+        assert response.status_code == 500
+        data = response.json()
+        assert data["success"] is False
+        assert data["error"]["code"] == "AI_EXTRACTION_FAILED"
+
+    @patch("app.services.extraction_service.extract_with_vision", new_callable=AsyncMock)
+    def test_successful_extraction_has_data_and_warnings(self, mock_vision):
+        """Successful extraction returns success=True with data and warnings keys."""
+        from app.schemas.nid import NIDData
+        mock_vision.return_value = NIDData(
+            name="Md Rahim",
+            fatherName="Abdul Karim",
+            motherName="Amena Begum",
+            dateOfBirth="1998-01-15",
+            nidNumber="1234567890",
+            presentAddress="Dhaka",
+            permanentAddress="Dhaka",
+        )
+        front_data = _create_test_image()
+        back_data = _create_test_image()
+        response = client.post(
+            "/extract",
+            files={
+                "front": ("front.png", front_data, "image/png"),
+                "back": ("back.png", back_data, "image/png"),
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "data" in data
+        assert "warnings" in data
+        assert isinstance(data["warnings"], list)

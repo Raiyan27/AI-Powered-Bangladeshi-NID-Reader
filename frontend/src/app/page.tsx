@@ -277,13 +277,13 @@ export default function Home() {
                 },
                 {
                   step: "2",
-                  title: "OCR Extraction",
-                  desc: "EasyOCR detects Bengali + English text with confidence scores",
+                  title: "Vision AI Analysis",
+                  desc: "LLM reads Bengali + English text directly from the image",
                 },
                 {
                   step: "3",
-                  title: "Vision AI",
-                  desc: "LLM semantically understands Bengali + English text",
+                  title: "Normalisation",
+                  desc: "Dates, NID digits, and names are cleaned and validated",
                 },
               ].map(({ step, title, desc }) => (
                 <div key={step} className="space-y-1">

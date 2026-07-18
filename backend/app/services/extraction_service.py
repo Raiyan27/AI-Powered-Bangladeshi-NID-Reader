@@ -4,9 +4,7 @@ from app.core.logging import logger
 from app.schemas.nid import NIDData
 from app.schemas.response import SuccessResponse
 from app.services.image_service import validate_image, preprocess_image
-from app.services.ocr_service import run_ocr
 from app.services.vision_service import extract_with_vision
-from app.services.merge_service import merge_results
 from app.services.translation_service import (
     normalize_date,
     normalize_nid_number,
@@ -25,85 +23,54 @@ async def extract_nid(
     """Orchestrate the full NID extraction pipeline.
 
     Steps:
-    1. Validate both images
-    2. Preprocess both images
-    3. Run OCR on both
-    4. Run Vision AI with images + OCR text
-    5. Merge OCR and Vision results
-    6. Normalize field values
-    7. Validate final output
-    8. Return structured response
+    1. Validate both images (format, size, dimensions)
+    2. Preprocess both images (rotation, resize, enhance, denoise)
+    3. Send images to Vision AI for extraction
+    4. Normalize field values (dates, NID digits, name casing)
+    5. Validate output and collect warnings
+    6. Return structured response
     """
     start_time = time.time()
-    logger.info("Starting NID extraction pipeline")
+    logger.info("NID extraction pipeline started")
 
     # Step 1: Validate
-    logger.info("Validating front image")
+    logger.info("Validating images")
     validate_image(front_bytes, front_filename)
-    logger.info("Validating back image")
     validate_image(back_bytes, back_filename)
 
     # Step 2: Preprocess
     logger.info("Preprocessing images")
-    front_img, front_processed = preprocess_image(front_bytes)
-    back_img, back_processed = preprocess_image(back_bytes)
+    front_processed = preprocess_image(front_bytes)
+    back_processed = preprocess_image(back_bytes)
+    logger.info(
+        f"Preprocessing complete — "
+        f"front: {len(front_processed) // 1024}KB, back: {len(back_processed) // 1024}KB"
+    )
 
-    # Step 3: OCR
-    logger.info("Running OCR on front image")
-    ocr_front = run_ocr(front_img)
-    logger.info("Running OCR on back image")
-    ocr_back = run_ocr(back_img)
-
-    logger.info("=== OCR FRONT PAGE RAW TEXT START ===")
-    if ocr_front.raw_text:
-        for line in ocr_front.raw_text.splitlines():
-            logger.info(f"  {line}")
-    else:
-        logger.info("  (No text detected)")
-    logger.info("=== OCR FRONT PAGE RAW TEXT END ===")
-
-    logger.info("=== OCR BACK PAGE RAW TEXT START ===")
-    if ocr_back.raw_text:
-        for line in ocr_back.raw_text.splitlines():
-            logger.info(f"  {line}")
-    else:
-        logger.info("  (No text detected)")
-    logger.info("=== OCR BACK PAGE RAW TEXT END ===")
-
-    # Step 4: Vision AI
+    # Step 3: Vision AI extraction
     logger.info("Running Vision AI extraction")
     vision_result = await extract_with_vision(
         front_image_bytes=front_processed,
         back_image_bytes=back_processed,
-        front_ocr_text=ocr_front.raw_text,
-        back_ocr_text=ocr_back.raw_text,
     )
 
-    # Step 5: Merge OCR + Vision results
-    logger.info("Merging OCR and Vision results")
-    merged_data, merge_warnings = merge_results(ocr_front, ocr_back, vision_result)
-
-    # Step 6: Normalize field values
+    # Step 4: Normalize field values
     logger.info("Normalizing extracted field values")
     normalized = NIDData(
-        name=normalize_name(merged_data.name),
-        fatherName=normalize_name(merged_data.fatherName),
-        motherName=normalize_name(merged_data.motherName),
-        dateOfBirth=normalize_date(merged_data.dateOfBirth),
-        nidNumber=normalize_nid_number(merged_data.nidNumber),
-        presentAddress=normalize_address(merged_data.presentAddress),
-        permanentAddress=normalize_address(merged_data.permanentAddress),
+        name=normalize_name(vision_result.name),
+        fatherName=normalize_name(vision_result.fatherName),
+        motherName=normalize_name(vision_result.motherName),
+        spouseName=normalize_name(vision_result.spouseName),
+        dateOfBirth=normalize_date(vision_result.dateOfBirth),
+        nidNumber=normalize_nid_number(vision_result.nidNumber),
+        presentAddress=normalize_address(vision_result.presentAddress),
+        permanentAddress=normalize_address(vision_result.permanentAddress),
     )
 
-    # Step 7: Validate
-    validation_warnings = validate_extraction(normalized)
-
-    all_warnings = merge_warnings + validation_warnings
+    # Step 5: Validate
+    warnings = validate_extraction(normalized)
 
     elapsed = time.time() - start_time
-    logger.info(f"NID extraction completed in {elapsed:.2f}s with {len(all_warnings)} warnings")
+    logger.info(f"NID extraction completed in {elapsed:.2f}s with {len(warnings)} warnings")
 
-    return SuccessResponse(
-        data=normalized,
-        warnings=all_warnings,
-    )
+    return SuccessResponse(data=normalized, warnings=warnings)

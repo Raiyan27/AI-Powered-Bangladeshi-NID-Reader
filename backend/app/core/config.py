@@ -27,7 +27,7 @@ _load_env_file()
 
 class AppConfig(BaseModel):
     name: str = "Bangladesh NID Extractor"
-    version: str = "1.0.0"
+    version: str = "2.0.0"
 
 
 class BackendConfig(BaseModel):
@@ -40,16 +40,13 @@ class BackendConfig(BaseModel):
     cors_origins: list[str] = ["http://localhost:3000"]
 
 
-class OCRConfig(BaseModel):
-    languages: list[str] = ["en", "bn"]
-    use_gpu: bool = False
-    confidence_threshold: float = 0.5
-
-
 class VisionConfig(BaseModel):
-    default_model: str = "google/gemini-3.1-flash-lite"
-    max_tokens: int = 2048
-    temperature: float = 0.1
+    default_model: str = "google/gemini-2.5-flash"
+    max_tokens: int = 1024
+    temperature: float = 0.0
+    timeout_s: float = 90.0
+    retry_attempts: int = 3
+    retry_delay_s: float = 1.0
 
 
 class FrontendConfig(BaseModel):
@@ -60,7 +57,6 @@ class FrontendConfig(BaseModel):
 class Settings(BaseModel):
     app: AppConfig = AppConfig()
     backend: BackendConfig = BackendConfig()
-    ocr: OCRConfig = OCRConfig()
     vision: VisionConfig = VisionConfig()
     frontend: FrontendConfig = FrontendConfig()
 
@@ -104,7 +100,6 @@ def get_settings() -> Settings:
     settings = Settings(
         app=AppConfig(**config_data.get("app", {})),
         backend=BackendConfig(**config_data.get("backend", {})),
-        ocr=OCRConfig(**config_data.get("ocr", {})),
         vision=VisionConfig(**config_data.get("vision", {})),
         frontend=FrontendConfig(**config_data.get("frontend", {})),
         openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),

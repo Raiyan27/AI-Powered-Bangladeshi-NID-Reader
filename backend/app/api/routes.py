@@ -23,7 +23,7 @@ async def extract_nid_endpoint(
 ):
     """Extract information from Bangladesh NID card images.
 
-    Accepts front and back images (or a single combined image), runs OCR + Vision AI extraction,
+    Accepts front and back images (or a single combined image), runs Vision AI extraction,
     and returns structured NID data.
     """
     logger.info("Received NID extraction request")

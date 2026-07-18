@@ -1,6 +1,6 @@
 app:
   name: "Bangladesh NID Extractor"
-  version: "1.0.0"
+  version: "2.0.0"
 
 backend:
   host: "0.0.0.0"
@@ -19,14 +19,10 @@ frontend:
   port: 3000
   api_url: "http://localhost:8000"
 
-ocr:
-  languages:
-    - "en"
-    - "bn"
-  use_gpu: false
-  confidence_threshold: 0.5
-
 vision:
   default_model: "google/gemini-2.5-flash"
-  max_tokens: 2048
-  temperature: 0.1
+  max_tokens: 1024
+  temperature: 0.0
+  timeout_s: 90.0
+  retry_attempts: 3
+  retry_delay_s: 1.0

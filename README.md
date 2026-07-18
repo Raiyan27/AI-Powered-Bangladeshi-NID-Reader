@@ -1,17 +1,16 @@
 # Bangladesh NID Extractor
 
-An AI-powered web application that extracts structured information from Bangladesh National ID (NID) cards. Supports Bengali, English, and mixed-text cards.
+An AI-powered web application that extracts structured information from Bangladesh National ID (NID) cards. Supports Bengali, English, and mixed-text cards, including both old laminated and new smart-card formats.
 
 ## Overview
 
-Users upload the **front** and **back** images of an NID card. The system:
+Users upload the **front** and **back** images of an NID card (or a single combined image). The system:
+
 1. **Validates** the images (format, size, dimensions)
-2. **Preprocesses** them using OpenCV (deskew, denoise, contrast enhancement)
-3. **Runs OCR** with EasyOCR to extract raw Bengali + English text and confidence scores
-4. **Analyzes** both images with a Vision LLM via OpenRouter (e.g., Gemini 2.5 Flash)
-5. **Merges** OCR and AI results using a confidence-based strategy
-6. **Normalizes** field values (date format, name casing, NID digit cleanup)
-7. **Returns** a structured JSON response
+2. **Preprocesses** them using OpenCV + Pillow (EXIF rotation, deskew, white balance, brightness normalisation, CLAHE contrast enhancement, sharpening, denoising)
+3. **Analyses** both images with a Vision LLM via OpenRouter (e.g., Gemini 2.5 Flash)
+4. **Normalises** field values (date format, name casing, NID digit cleanup)
+5. **Returns** a structured JSON response
 
 ## Architecture
 
@@ -26,31 +25,28 @@ Next.js Frontend (TypeScript + Tailwind CSS)
 FastAPI Backend
  │
  ├─ Image Validation (Pillow)
- ├─ Image Preprocessing (OpenCV + Pillow)
- │   └─ Auto-rotate, resize, deskew, CLAHE contrast, denoise
+ │   └─ Format check, size limit, dimension check
  │
- ├─ EasyOCR Engine (Bengali + English)
- │   └─ Text + bounding boxes + confidence scores
+ ├─ Image Preprocessing (OpenCV + Pillow)
+ │   └─ EXIF auto-rotate, intelligent resize, deskew
+ │   └─ White balance, brightness normalisation, CLAHE contrast
+ │   └─ Unsharp-mask sharpening, denoising, JPEG compression
  │
  ├─ Vision LLM (OpenRouter API)
- │   └─ Reads Bengali + English text from images
- │   └─ Uses OCR as supporting reference
+ │   └─ Reads Bengali + English text directly from images
+ │   └─ Retry with exponential backoff (configurable attempts)
+ │   └─ Per-request tracing via X-Request-Id header
  │
- ├─ Merge Layer
- │   └─ Numeric fields (NID#, DOB): prefer high-confidence OCR
- │   └─ Text fields (names, addresses): prefer Vision AI
- │
- ├─ Translation/Normalization Layer
+ ├─ Normalisation Layer
  │   └─ Date → YYYY-MM-DD, NID → digits-only, names → title case
  │
  └─ Pydantic Validation + Warnings
      └─ Returns warnings for missing fields, format mismatches
 ```
 
-**Why both OCR and Vision AI?**
-- EasyOCR is fast and supports both Bengali and English natively for structured fields like NID numbers and dates
-- Vision LLMs (e.g., Gemini) excel at understanding Bengali semantics, names, and addresses
-- Combining both gives higher accuracy than either alone
+**Why Vision AI only?**
+
+Vision LLMs (e.g., Gemini 2.5 Flash) can read Bengali and English text directly from images with high accuracy. A separate OCR layer was previously used to provide text hints but added significant complexity, model download overhead (~1 GB for EasyOCR), and slow cold-start times without a reliable accuracy improvement over the Vision model alone.
 
 ## Project Structure
 
@@ -64,13 +60,11 @@ FastAPI Backend
 │   │   ├── prompts/nid_extraction.txt  # Vision AI prompt
 │   │   ├── schemas/               # Pydantic models
 │   │   └── services/
-│   │       ├── image_service.py   # Validation + preprocessing
-│   │       ├── ocr_service.py     # EasyOCR wrapper (Bengali + English)
-│   │       ├── vision_service.py  # OpenRouter Vision API
-│   │       ├── merge_service.py   # Merge strategy
-│   │       ├── translation_service.py  # Normalization
+│   │       ├── image_service.py   # Validation + preprocessing pipeline
+│   │       ├── vision_service.py  # OpenRouter Vision API + retry logic
+│   │       ├── translation_service.py  # Field normalisation
 │   │       ├── extraction_service.py   # Pipeline orchestrator
-│   │       └── validation_service.py   # Output validation
+│   │       └── validation_service.py   # Output validation + warnings
 │   ├── tests/                     # Pytest unit + integration tests
 │   ├── Dockerfile
 │   └── requirements.txt
@@ -147,7 +141,7 @@ copy .env.example .env
 
 # 2. Set your API key in .env
 # OPENROUTER_API_KEY=your_key_here
-# OPENROUTER_MODEL=google/gemini-3.1-flash-lite
+# OPENROUTER_MODEL=google/gemini-2.5-flash
 
 # 3. Build and start everything
 docker compose up --build
@@ -162,7 +156,7 @@ docker compose up --build
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `OPENROUTER_API_KEY` | Yes | — | Your OpenRouter API key |
-| `OPENROUTER_MODEL` | No | `google/gemini-3.1-flash-lite` | Vision model to use |
+| `OPENROUTER_MODEL` | No | `google/gemini-2.5-flash` | Vision model to use |
 
 ## API Documentation
 
@@ -181,8 +175,8 @@ Extracts NID information from uploaded images.
 **Content-Type:** `multipart/form-data`
 
 **Fields:**
-- `front` — Front side image (JPG/JPEG/PNG, max 10 MB)
-- `back` — Back side image (JPG/JPEG/PNG, max 10 MB)
+- `front` — Front side image (JPG/JPEG/PNG, max 10 MB). If this is a combined front+back image, the `back` field can be omitted.
+- `back` — Back side image (JPG/JPEG/PNG, max 10 MB). Optional if `front` contains both sides.
 
 **Success Response:**
 ```json
@@ -192,6 +186,7 @@ Extracts NID information from uploaded images.
     "name": "Md Rahim",
     "fatherName": "Abdul Karim",
     "motherName": "Amena Begum",
+    "spouseName": null,
     "dateOfBirth": "1998-01-15",
     "nidNumber": "1234567890123",
     "presentAddress": "Dhaka, Bangladesh",
@@ -217,11 +212,10 @@ Extracts NID information from uploaded images.
 | Code | Description |
 |---|---|
 | `MISSING_FRONT_IMAGE` | Front image not provided |
-| `MISSING_BACK_IMAGE` | Back image not provided |
 | `INVALID_IMAGE_FORMAT` | Wrong file format or corrupted file |
 | `LOW_IMAGE_QUALITY` | Image too small or resolution too low |
-| `OCR_FAILED` | EasyOCR could not process the image |
-| `AI_EXTRACTION_FAILED` | Vision AI API error |
+| `INVALID_DOCUMENT_TYPE` | Uploaded image is not a Bangladesh NID card |
+| `AI_EXTRACTION_FAILED` | Vision AI API error (after retries) |
 | `INTERNAL_ERROR` | Unexpected server error |
 
 ## Testing
@@ -232,11 +226,11 @@ pytest tests/ -v
 ```
 
 The test suite includes:
-- **API tests**: endpoint validation, error responses
-- **Merge tests**: OCR + Vision AI merge logic
-- **Validation tests**: field validation, warning generation
+- **API tests**: endpoint validation, error responses, Vision AI failure handling
+- **Vision service tests**: retry logic, timeout handling, malformed responses, rate limits
+- **Validation tests**: field validation, warning generation, date range checks
 - **Integration tests**: full pipeline with sample NID images (Vision AI mocked)
-- **Translation tests**: date normalization, NID number cleaning
+- **Translation tests**: date normalisation, NID number cleaning
 
 ## Testing with the Sample NID
 
@@ -258,15 +252,18 @@ Expected output is in `samples/NID.json`.
 - **Antigravity (Google DeepMind)** — Used for code generation, architecture planning, and iterative refinement
 - **OpenRouter / Gemini 2.5 Flash** — Used as the Vision LLM for NID information extraction at runtime
 
-### Prompts Used
+### Prompt Engineering
 
 The extraction prompt is in [`backend/app/prompts/nid_extraction.txt`](backend/app/prompts/nid_extraction.txt).
 
-Key prompt engineering decisions:
-- Instructed the model to prefer image content over OCR text (OCR is reference only)
-- Provided concrete Bengali → English transliteration examples from the sample card
-- Required strict ISO date format (`YYYY-MM-DD`) to simplify post-processing
-- Required JSON-only output (no markdown, no explanations)
+Key prompt design decisions:
+- Defines the AI's role as a precise document analysis specialist
+- Covers both old (laminated) and new (smart card) Bangladesh NID formats explicitly
+- Contains explicit Bengali digit conversion rules (০১২৩→0123)
+- Requires strict ISO date format (`YYYY-MM-DD`) for deterministic post-processing
+- Instructs the model to set fields to `null` when uncertain (never guess)
+- Requires JSON-only output (no markdown, no explanations)
+- Handles edge cases: rotated images, glare, blur, partial crops, perspective distortion
 
 ### Verification
 
@@ -278,7 +275,8 @@ All generated code was verified by:
 
 ### Manual Modifications
 
-- OCR service: migrated from PaddleOCR (English-only) to EasyOCR (Bengali + English) for native multilingual support
-- Merge service: tuned confidence thresholds and warning messages
-- Prompt: multiple iterations to improve Bengali name transliteration accuracy
-- Translation service: added date normalization for `DD Mon YYYY` format (common Vision AI output)
+- Migrated from EasyOCR + merge pipeline to Vision AI-only architecture
+- Added retry with exponential backoff for transient API failures
+- Added per-request UUID tracing for debugging
+- Enhanced preprocessing with white balance, gamma normalisation, and sharpening
+- Prompt redesigned from scratch to remove OCR text dependencies

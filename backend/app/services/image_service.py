@@ -7,7 +7,7 @@ from PIL import Image
 from app.core.config import get_settings
 from app.core.logging import logger
 from app.utils.file_utils import get_file_extension
-from app.utils.image_utils import bytes_to_numpy, numpy_to_bytes, read_exif_rotation
+from app.utils.image_utils import bytes_to_numpy, numpy_to_jpeg, read_exif_rotation
 
 
 class ImageValidationError(Exception):
@@ -62,13 +62,22 @@ def validate_image(file_bytes: bytes, filename: str) -> None:
         logger.info(f"Image will be resized: {width}x{height} exceeds max dimension")
 
 
-def preprocess_image(file_bytes: bytes) -> tuple[np.ndarray, bytes]:
-    """Preprocess image for OCR and Vision AI.
+def preprocess_image(file_bytes: bytes) -> bytes:
+    """Preprocess image for Vision AI extraction.
 
-    Steps: auto-rotate, resize, enhance contrast, denoise.
-    Returns (numpy array for OCR, processed bytes for Vision API).
+    Applies a sequence of enhancements optimised for mobile-phone NID photos:
+      1. EXIF auto-rotation
+      2. Intelligent downscale (preserves aspect ratio)
+      3. Deskew via Hough line detection
+      4. White balance correction (gray-world algorithm)
+      5. Brightness / gamma normalisation
+      6. CLAHE contrast enhancement (LAB colour space)
+      7. Unsharp-mask sharpening
+      8. Fast non-local means denoising
+      9. JPEG re-encoding at quality=90 to reduce API payload size
+
+    Returns processed JPEG bytes ready for the Vision API.
     """
-    # Auto-rotate based on EXIF
     rotation = read_exif_rotation(file_bytes)
     img = bytes_to_numpy(file_bytes)
 
@@ -78,16 +87,14 @@ def preprocess_image(file_bytes: bytes) -> tuple[np.ndarray, bytes]:
             message="Failed to decode image data.",
         )
 
+    # Step 1: EXIF rotation correction
     if rotation != 0:
-        if rotation == 90:
-            img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-        elif rotation == 180:
-            img = cv2.rotate(img, cv2.ROTATE_180)
-        elif rotation == 270:
-            img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        logger.info(f"Auto-rotated image by {rotation} degrees")
+        rotation_flags = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}
+        if rotation in rotation_flags:
+            img = cv2.rotate(img, rotation_flags[rotation])
+            logger.info(f"Auto-rotated image by {rotation} degrees")
 
-    # Resize if too large (preserve aspect ratio)
+    # Step 2: Downscale if too large (preserve aspect ratio)
     settings = get_settings()
     h, w = img.shape[:2]
     max_dim = settings.backend.max_image_dimension
@@ -98,45 +105,54 @@ def preprocess_image(file_bytes: bytes) -> tuple[np.ndarray, bytes]:
         img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
         logger.info(f"Resized image from {w}x{h} to {new_w}x{new_h}")
 
-    # Deskew using minimum area rectangle on largest contour
+    # Step 3: Deskew
     img = _deskew(img)
 
-    # Enhance contrast using CLAHE on L channel of LAB color space
+    # Step 4: White balance correction
+    img = _white_balance(img)
+
+    # Step 5: Brightness / gamma normalisation
+    img = _normalize_brightness(img)
+
+    # Step 6: CLAHE contrast enhancement
     img = _enhance_contrast(img)
 
-    # Denoise
-    img = cv2.fastNlMeansDenoisingColored(img, None, 10, 10, 7, 21)
+    # Step 7: Sharpness enhancement (unsharp mask)
+    img = _sharpen(img)
 
-    processed_bytes = numpy_to_bytes(img)
-    return img, processed_bytes
+    # Step 8: Denoise
+    img = cv2.fastNlMeansDenoisingColored(img, None, 7, 7, 7, 21)
 
+    # Step 9: Re-encode as JPEG at quality=90 for compact payload
+    return numpy_to_jpeg(img, quality=90)
+
+
+# ---------------------------------------------------------------------------
+# Private preprocessing helpers
+# ---------------------------------------------------------------------------
 
 def _deskew(img: np.ndarray) -> np.ndarray:
-    """Attempt to deskew image using contour detection."""
+    """Attempt to deskew image using Hough line detection."""
     try:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         edges = cv2.Canny(gray, 50, 150, apertureSize=3)
-
-        # Find lines using Hough transform
         lines = cv2.HoughLinesP(edges, 1, np.pi / 180, 100, minLineLength=100, maxLineGap=10)
 
         if lines is None or len(lines) < 5:
             return img
 
-        # Calculate median angle from detected lines
         angles = []
         for line in lines:
             x1, y1, x2, y2 = line[0]
             angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
-            if abs(angle) < 15:  # Only consider near-horizontal lines
+            if abs(angle) < 15:  # Consider only near-horizontal lines
                 angles.append(angle)
 
         if not angles:
             return img
 
-        median_angle = np.median(angles)
-
-        if abs(median_angle) < 0.5:  # Skip if nearly straight
+        median_angle = float(np.median(angles))
+        if abs(median_angle) < 0.5:
             return img
 
         h, w = img.shape[:2]
@@ -144,28 +160,73 @@ def _deskew(img: np.ndarray) -> np.ndarray:
         rotation_matrix = cv2.getRotationMatrix2D(center, median_angle, 1.0)
         rotated = cv2.warpAffine(img, rotation_matrix, (w, h), flags=cv2.INTER_CUBIC,
                                   borderMode=cv2.BORDER_REPLICATE)
-
         logger.info(f"Deskewed image by {median_angle:.2f} degrees")
         return rotated
 
     except Exception as e:
-        logger.warning(f"Deskew failed, using original image: {e}")
+        logger.warning(f"Deskew failed, using original: {e}")
+        return img
+
+
+def _white_balance(img: np.ndarray) -> np.ndarray:
+    """Apply gray-world white balance to reduce colour casts from indoor lighting."""
+    try:
+        img_float = img.astype(np.float32)
+        b_mean, g_mean, r_mean = (img_float[:, :, i].mean() for i in range(3))
+        gray_mean = (b_mean + g_mean + r_mean) / 3.0
+        if gray_mean == 0:
+            return img
+        scale = np.array([gray_mean / b_mean, gray_mean / g_mean, gray_mean / r_mean], dtype=np.float32)
+        balanced = np.clip(img_float * scale, 0, 255).astype(np.uint8)
+        return balanced
+    except Exception as e:
+        logger.warning(f"White balance failed, using original: {e}")
+        return img
+
+
+def _normalize_brightness(img: np.ndarray) -> np.ndarray:
+    """Normalise image brightness using gamma correction based on mean luminance."""
+    try:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        mean_lum = float(gray.mean())
+
+        # Target luminance ~130 out of 255; skip if already close
+        target = 130.0
+        if abs(mean_lum - target) < 15:
+            return img
+
+        gamma = np.log(target / 255.0) / np.log(mean_lum / 255.0 + 1e-6)
+        gamma = float(np.clip(gamma, 0.5, 2.5))
+
+        lut = np.array([min(255, int((i / 255.0) ** gamma * 255)) for i in range(256)], dtype=np.uint8)
+        corrected = cv2.LUT(img, lut)
+        logger.debug(f"Gamma correction applied: gamma={gamma:.2f} (mean_lum={mean_lum:.1f})")
+        return corrected
+    except Exception as e:
+        logger.warning(f"Brightness normalisation failed, using original: {e}")
         return img
 
 
 def _enhance_contrast(img: np.ndarray) -> np.ndarray:
-    """Enhance contrast using CLAHE on LAB color space."""
+    """Enhance contrast using CLAHE on the L channel of LAB colour space."""
     try:
         lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
         l_channel, a_channel, b_channel = cv2.split(lab)
-
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         l_enhanced = clahe.apply(l_channel)
-
         enhanced_lab = cv2.merge([l_enhanced, a_channel, b_channel])
-        enhanced_img = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
-
-        return enhanced_img
+        return cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
     except Exception as e:
-        logger.warning(f"Contrast enhancement failed: {e}")
+        logger.warning(f"Contrast enhancement failed, using original: {e}")
+        return img
+
+
+def _sharpen(img: np.ndarray) -> np.ndarray:
+    """Apply unsharp-mask sharpening to improve text edge clarity."""
+    try:
+        blurred = cv2.GaussianBlur(img, (0, 0), sigmaX=2.0)
+        sharpened = cv2.addWeighted(img, 1.5, blurred, -0.5, 0)
+        return sharpened
+    except Exception as e:
+        logger.warning(f"Sharpening failed, using original: {e}")
         return img

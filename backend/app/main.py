@@ -6,21 +6,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.logging import logger
 from app.api.routes import router
-from app.services.ocr_service import get_ocr_engine
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan: initialize resources on startup."""
-    logger.info("Starting Bangladesh NID Extractor API")
+    """Application lifespan: log startup and shutdown events."""
     settings = get_settings()
+    logger.info("Starting Bangladesh NID Extractor API")
     logger.info(f"Version: {settings.app.version}")
     logger.info(f"Vision model: {settings.model}")
-
-    # Pre-load OCR engine to avoid cold start on first request
-    logger.info("Pre-loading OCR engine...")
-    get_ocr_engine()
-    logger.info("OCR engine ready")
+    logger.info(f"Retry attempts: {settings.vision.retry_attempts}")
 
     yield
 
@@ -38,7 +33,6 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.backend.cors_origins,
@@ -47,7 +41,6 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Routes
     app.include_router(router)
 
     return app

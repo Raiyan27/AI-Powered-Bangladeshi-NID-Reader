@@ -30,7 +30,6 @@ class TestImageValidation:
 
     def test_reject_oversized_file(self):
         """File larger than max_upload_size_mb should be rejected."""
-        # Create a file > 10MB
         large_data = b"x" * (11 * 1024 * 1024)
         with pytest.raises(ImageValidationError) as exc:
             validate_image(large_data, "large.png")
@@ -61,28 +60,16 @@ class TestNIDValidation:
         assert any("NID number" in w for w in warnings)
 
     def test_invalid_nid_number_format(self):
-        data = NIDData(
-            name="Test",
-            nidNumber="12345",  # Invalid: not 10, 13, or 17 digits
-        )
+        data = NIDData(name="Test", nidNumber="12345")  # Invalid: not 10, 13, or 17 digits
         warnings = validate_extraction(data)
         assert any("NID number" in w and "invalid" in w for w in warnings)
 
     def test_valid_nid_number_formats(self):
-        # 10 digits
-        data = NIDData(name="Test", nidNumber="1234567890")
-        warnings = validate_extraction(data)
-        assert not any("NID number" in w and "invalid" in w for w in warnings)
-
-        # 13 digits
-        data = NIDData(name="Test", nidNumber="1234567890123")
-        warnings = validate_extraction(data)
-        assert not any("NID number" in w and "invalid" in w for w in warnings)
-
-        # 17 digits
-        data = NIDData(name="Test", nidNumber="12345678901234567")
-        warnings = validate_extraction(data)
-        assert not any("NID number" in w and "invalid" in w for w in warnings)
+        for nid in ["1234567890", "1234567890123", "12345678901234567"]:
+            data = NIDData(name="Test", nidNumber=nid)
+            warnings = validate_extraction(data)
+            assert not any("NID number" in w and "invalid" in w for w in warnings), \
+                f"Unexpected invalid warning for NID '{nid}'"
 
     def test_invalid_date_format(self):
         data = NIDData(name="Test", dateOfBirth="15-01-1998")
@@ -99,3 +86,29 @@ class TestNIDValidation:
         warnings = validate_extraction(data)
         assert any("Name" in w and "could not be detected" in w for w in warnings)
         assert any("Father's name" in w for w in warnings)
+
+    def test_date_year_out_of_range(self):
+        """Year outside 1900-2030 should generate a warning."""
+        data = NIDData(name="Test", dateOfBirth="1800-01-01")
+        warnings = validate_extraction(data)
+        assert any("year" in w and "1800" in w for w in warnings)
+
+    def test_date_year_within_range_no_warning(self):
+        data = NIDData(name="Test", dateOfBirth="1990-06-15")
+        warnings = validate_extraction(data)
+        assert not any("year" in w for w in warnings)
+
+    def test_spouse_name_optional_no_warning_when_absent(self):
+        """spouseName is optional — no warning should be generated when it is absent."""
+        data = NIDData(
+            name="Md Rahim",
+            fatherName="Abdul Karim",
+            motherName="Amena Begum",
+            dateOfBirth="1998-01-15",
+            nidNumber="1234567890",
+            presentAddress="Dhaka",
+            permanentAddress="Dhaka",
+            spouseName=None,
+        )
+        warnings = validate_extraction(data)
+        assert not any("spouse" in w.lower() for w in warnings)
