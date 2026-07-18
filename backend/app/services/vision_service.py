@@ -183,20 +183,36 @@ def _parse_response(raw_content: str, request_id: str) -> NIDData:
             message="AI model returned an unparseable response. Please try again.",
         )
 
-    # Validate document type
-    is_nid = nid_dict.get("isBangladeshNID")
-    has_data = any(
+    # Validate front and back document types separately
+    is_front_nid = nid_dict.get("isFrontBangladeshNID")
+    is_back_nid = nid_dict.get("isBackBangladeshNID")
+
+    has_front_data = any(
         nid_dict.get(f) not in (None, "")
         for f in ["name", "nidNumber", "dateOfBirth"]
     )
+    has_back_data = any(
+        nid_dict.get(f) not in (None, "")
+        for f in ["address", "presentAddress", "permanentAddress"]
+    )
 
-    if is_nid is False or (is_nid is None and not has_data):
+    front_invalid = is_front_nid is False or (is_front_nid is None and not has_front_data)
+    back_invalid = is_back_nid is False or (is_back_nid is None and not has_back_data)
+
+    if front_invalid and back_invalid:
         raise ImageValidationError(
             code="INVALID_DOCUMENT_TYPE",
-            message=(
-                "The uploaded image is not a valid Bangladesh National ID (NID) card. "
-                "Please upload a valid NID image."
-            ),
+            message="The uploaded images are not valid Bangladesh NID card sides. Please upload valid NID images.",
+        )
+    elif front_invalid:
+        raise ImageValidationError(
+            code="INVALID_FRONT_IMAGE",
+            message="The front image is not a valid Bangladesh NID front side. Please reupload the front image.",
+        )
+    elif back_invalid:
+        raise ImageValidationError(
+            code="INVALID_BACK_IMAGE",
+            message="The back image is not a valid Bangladesh NID back side. Please reupload the back image.",
         )
 
     known_fields = {

@@ -44,7 +44,8 @@ class TestCleanJsonResponse:
 class TestParseResponse:
     def _valid_payload(self, **overrides) -> str:
         data = {
-            "isBangladeshNID": True,
+            "isFrontBangladeshNID": True,
+            "isBackBangladeshNID": True,
             "name": "Md Rahim",
             "fatherName": "Abdul Karim",
             "motherName": "Amena Begum",
@@ -68,13 +69,32 @@ class TestParseResponse:
         assert result.spouseName == "Fatema Begum"
 
     def test_non_nid_document_raises_image_validation_error(self):
-        payload = json.dumps({"isBangladeshNID": False, "name": None})
+        payload = json.dumps({"isFrontBangladeshNID": False, "isBackBangladeshNID": False, "name": None})
         with pytest.raises(ImageValidationError) as exc:
             _parse_response(payload, "req123")
         assert exc.value.code == "INVALID_DOCUMENT_TYPE"
 
+    def test_invalid_front_nid_raises_front_validation_error(self):
+        payload = json.dumps({"isFrontBangladeshNID": False, "isBackBangladeshNID": True, "name": None})
+        with pytest.raises(ImageValidationError) as exc:
+            _parse_response(payload, "req123")
+        assert exc.value.code == "INVALID_FRONT_IMAGE"
+
+    def test_invalid_back_nid_raises_back_validation_error(self):
+        payload = json.dumps({"isFrontBangladeshNID": True, "isBackBangladeshNID": False, "address": None})
+        with pytest.raises(ImageValidationError) as exc:
+            _parse_response(payload, "req123")
+        assert exc.value.code == "INVALID_BACK_IMAGE"
+
     def test_null_is_nid_with_no_data_raises_image_validation_error(self):
-        payload = json.dumps({"isBangladeshNID": None, "name": None, "nidNumber": None, "dateOfBirth": None})
+        payload = json.dumps({
+            "isFrontBangladeshNID": None,
+            "isBackBangladeshNID": None,
+            "name": None,
+            "nidNumber": None,
+            "dateOfBirth": None,
+            "address": None
+        })
         with pytest.raises(ImageValidationError):
             _parse_response(payload, "req123")
 
@@ -105,7 +125,8 @@ def _make_image() -> bytes:
 
 
 VALID_NID_JSON = json.dumps({
-    "isBangladeshNID": True,
+    "isFrontBangladeshNID": True,
+    "isBackBangladeshNID": True,
     "name": "Md Rahim",
     "fatherName": "Abdul Karim",
     "motherName": "Amena Begum",

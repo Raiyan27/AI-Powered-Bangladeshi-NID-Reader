@@ -103,7 +103,16 @@ def get_settings() -> Settings:
         app_env = "dev"
 
     backend_config = BackendConfig(**config_data.get("backend", {}))
-    if app_env == "prod":
+
+    # Load CORS origins from env (comma-separated list)
+    cors_env = os.getenv("CORS_ORIGINS")
+    if cors_env:
+        origins = [o.strip() for o in cors_env.split(",") if o.strip()]
+        for origin in origins:
+            if origin not in backend_config.cors_origins:
+                backend_config.cors_origins.append(origin)
+    elif app_env == "prod":
+        # Fallback default prod origins
         prod_origins = [
             "https://81t5j6p1-3000.asse.devtunnels.ms",
             "https://81t5j6p1-3000.asse.devtunnels.ms/",

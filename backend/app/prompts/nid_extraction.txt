@@ -8,16 +8,17 @@ YOUR TASK
 
 Analyse both images visually and extract the following fields:
 
-  isBangladeshNID  — boolean. true if the images show a valid Bangladesh NID card. false for any other document or non-document image.
-  name             — Cardholder's full name in English. Use the printed English text if visible; otherwise accurately transliterate the Bengali name.
-  fatherName       — Father's full name in English. null if not present.
-  motherName       — Mother's full name in English. null if not present.
-  spouseName       — Spouse's full name in English. null if not present. Do NOT confuse with father's or mother's name.
-  dateOfBirth      — Date of birth strictly in YYYY-MM-DD format (e.g. 1998-01-15). null if not readable.
-  nidNumber        — The NID / ID number as a digit-only string (e.g. "1234567890123"). Remove all spaces, dashes, and non-digit characters. null if not found.
-  address          — The primary address found on the card, in English. This is MANDATORY if any address exists. If the card shows only one address, put it here.
-  presentAddress   — Present / current address in English ONLY if the card explicitly labels it as present address, example: (বর্তমান ঠিকানা). null if the card does not explicitly distinguish present vs permanent address.
-  permanentAddress — Permanent address in English ONLY if the card explicitly labels it as permanent address, example: (স্থায়ী ঠিকানা). null if the card does not explicitly distinguish present vs permanent address.
+  isFrontBangladeshNID — boolean. true if the front image is a valid Bangladesh NID front side. false for any other document or non-document image.
+  isBackBangladeshNID  — boolean. true if the back image is a valid Bangladesh NID back side. false for any other document or non-document image.
+  name                 — Cardholder's full name in English. Use the printed English text if visible; otherwise accurately transliterate the Bengali name.
+  fatherName           — Father's full name in English. null if not present.
+  motherName           — Mother's full name in English. null if not present.
+  spouseName           — Spouse's full name in English. null if not present. Do NOT confuse with father's or mother's name.
+  dateOfBirth          — Date of birth strictly in YYYY-MM-DD format (e.g. 1998-01-15). null if not readable.
+  nidNumber            — The NID / ID number as a digit-only string (e.g. "1234567890123"). Remove all spaces, dashes, and non-digit characters. null if not found.
+  address              — The primary address found on the card, in English. This is MANDATORY if any address exists. If the card shows only one address, put it here.
+  presentAddress       — Present / current address in English ONLY if the card explicitly labels it as present address, example: (বর্তমান ঠিকানা). null if the card does not explicitly distinguish present vs permanent address.
+  permanentAddress     — Permanent address in English ONLY if the card explicitly labels it as permanent address, example: (স্থায়ী ঠিকানা). null if the card does not explicitly distinguish present vs permanent address.
 
 ---
 
@@ -48,17 +49,18 @@ New format (smart card, blue):
 EXTRACTION RULES
 
 1. Extract data from what is VISUALLY PRESENT in the images. Do not invent or guess missing information.
-2. If isBangladeshNID is false, set ALL other fields to null and return immediately.
-3. Name fields: use the English transliteration printed on the card when available. If only Bengali is present, transliterate accurately.
+2. If isFrontBangladeshNID is false, set all front-side fields (name, fatherName, motherName, spouseName, dateOfBirth, nidNumber) to null.
+3. If isBackBangladeshNID is false, set all back-side fields (address, presentAddress, permanentAddress) to null.
+4. Name fields: use the English transliteration printed on the card when available. If only Bengali is present, transliterate accurately.
    - Bengali example: "মোঃ ফিরোজ আল আজাদ" → "Abdul Karim"
    - Bengali example: "তাছলিমা আক্তার রেহেন" → "Amena Begum"
-4. Do NOT mix up name fields — spouseName is a separate field from fatherName and motherName.
-5. dateOfBirth must always be YYYY-MM-DD. Convert from any format (e.g. "15 Jan 1998" → "1998-01-15").
-6. nidNumber: digits only — strip spaces, dashes, and any non-digit characters.
-7. If a field is partially visible, unreadable, obscured, or genuinely absent, set it to null. Never guess.
-8. Handle image quality issues gracefully: glare, blur, shadow, perspective distortion, and partial crops should not cause hallucinations.
-9. The card may be rotated — read the content regardless of orientation.
-10. Bengali digits (০১২৩৪৫৬৭৮৯) must be converted to ASCII digits (0123456789) in nidNumber and dateOfBirth.
+5. Do NOT mix up name fields — spouseName is a separate field from fatherName and motherName.
+6. dateOfBirth must always be YYYY-MM-DD. Convert from any format (e.g. "15 Jan 1998" → "1998-01-15").
+7. nidNumber: digits only — strip spaces, dashes, and any non-digit characters.
+8. If a field is partially visible, unreadable, obscured, or genuinely absent, set it to null. Never guess.
+9. Handle image quality issues gracefully: glare, blur, shadow, perspective distortion, and partial crops should not cause hallucinations.
+10. The card may be rotated — read the content regardless of orientation.
+11. Bengali digits (০১২৩৪৫৬৭৮৯) must be converted to ASCII digits (0123456789) in nidNumber and dateOfBirth.
 
 ---
 
@@ -67,7 +69,8 @@ OUTPUT FORMAT
 Return ONLY a single valid JSON object with exactly these keys:
 
 {
-  "isBangladeshNID": true,
+  "isFrontBangladeshNID": true,
+  "isBackBangladeshNID": true,
   "name": "...",
   "fatherName": "...",
   "motherName": "...",

@@ -18,6 +18,8 @@ const ERROR_CODE_LABELS: Record<string, string> = {
   OCR_FAILED: "OCR Failed",
   AI_EXTRACTION_FAILED: "AI Extraction Failed",
   INVALID_DOCUMENT_TYPE: "Invalid Document Type",
+  INVALID_FRONT_IMAGE: "Invalid Front Image",
+  INVALID_BACK_IMAGE: "Invalid Back Image",
   NETWORK_ERROR: "Network Error",
   INTERNAL_ERROR: "Server Error",
   UNKNOWN_ERROR: "Unknown Error",
