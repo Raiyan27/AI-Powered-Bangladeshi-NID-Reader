@@ -200,24 +200,63 @@ export default function FileUpload({
     startCamera(deviceId);
   };
 
-  const capturePhoto = () => {
-    if (!videoRef.current) return;
+  const capturePhoto = async () => {
+    if (!videoRef.current || !streamRef.current) return;
     const video = videoRef.current;
+    const track = streamRef.current.getVideoTracks()[0];
+
+    if (!track) {
+      console.warn("[Camera Capture] No video track found to capture from.");
+      return;
+    }
+
+    // Try ImageCapture API first (delivers full native photographic resolution from hardware sensor)
+    if ("ImageCapture" in window) {
+      try {
+        console.log("[Camera Capture] Attempting native hardware ImageCapture snapshot...");
+        // @ts-ignore
+        const imageCapture = new window.ImageCapture(track);
+        // @ts-ignore
+        const blob = await imageCapture.takePhoto();
+        console.log(`[Camera Capture] Native ImageCapture successful: ${blob.size} bytes`);
+        const captured = new File([blob], `${id}-capture.jpg`, { type: "image/jpeg" });
+        stopCamera();
+        handleFile(captured);
+        return;
+      } catch (err) {
+        console.warn("[Camera Capture] Native ImageCapture failed, falling back to canvas", err);
+      }
+    }
+
+    // Fallback: high-quality canvas draw
+    if (!video.videoWidth || !video.videoHeight) {
+      console.warn("[Camera Capture] Video dimensions are invalid (0x0).");
+      return;
+    }
+
+    console.log(`[Camera Capture] Canvas fallback capture size: ${video.videoWidth}x${video.videoHeight}`);
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    
+    // Enable high-quality image smoothing
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    
     ctx.drawImage(video, 0, 0);
+
     canvas.toBlob(
       (blob) => {
         if (!blob) return;
+        console.log(`[Camera Capture] Canvas capture successful: ${blob.size} bytes`);
         const captured = new File([blob], `${id}-capture.jpg`, { type: "image/jpeg" });
         stopCamera();
         handleFile(captured);
       },
       "image/jpeg",
-      0.92
+      0.95 // Bump quality to 95%
     );
   };
 

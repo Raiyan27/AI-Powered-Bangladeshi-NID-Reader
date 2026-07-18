@@ -65,18 +65,10 @@ def validate_image(file_bytes: bytes, filename: str) -> None:
 def preprocess_image(file_bytes: bytes) -> bytes:
     """Preprocess image for Vision AI extraction.
 
-    Applies a sequence of enhancements optimised for mobile-phone NID photos:
-      1. EXIF auto-rotation
-      2. Intelligent downscale (preserves aspect ratio)
-      3. Deskew via Hough line detection
-      4. White balance correction (gray-world algorithm)
-      5. Brightness / gamma normalisation
-      6. CLAHE contrast enhancement (LAB colour space)
-      7. Unsharp-mask sharpening
-      8. Fast non-local means denoising
-      9. JPEG re-encoding at quality=90 to reduce API payload size
-
-    Returns processed JPEG bytes ready for the Vision API.
+    Preserves the raw photographic quality of the camera snapshot:
+      1. EXIF auto-rotation (keeps card right-side up)
+      2. Intelligent downscaling (keeps image within API limits)
+      3. Re-encoding as high-quality JPEG (quality=95)
     """
     rotation = read_exif_rotation(file_bytes)
     img = bytes_to_numpy(file_bytes)
@@ -105,26 +97,8 @@ def preprocess_image(file_bytes: bytes) -> bytes:
         img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
         logger.info(f"Resized image from {w}x{h} to {new_w}x{new_h}")
 
-    # Step 3: Deskew
-    img = _deskew(img)
-
-    # Step 4: White balance correction
-    img = _white_balance(img)
-
-    # Step 5: Brightness / gamma normalisation
-    img = _normalize_brightness(img)
-
-    # Step 6: CLAHE contrast enhancement
-    img = _enhance_contrast(img)
-
-    # Step 7: Sharpness enhancement (unsharp mask)
-    img = _sharpen(img)
-
-    # Step 8: Denoise
-    img = cv2.fastNlMeansDenoisingColored(img, None, 7, 7, 7, 21)
-
-    # Step 9: Re-encode as JPEG at quality=90 for compact payload
-    return numpy_to_jpeg(img, quality=90)
+    # Re-encode as JPEG at quality=95 for high visual fidelity
+    return numpy_to_jpeg(img, quality=95)
 
 
 # ---------------------------------------------------------------------------
