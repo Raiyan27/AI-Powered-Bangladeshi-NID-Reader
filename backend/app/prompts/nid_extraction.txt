@@ -16,15 +16,15 @@ Analyse both images visually and extract the following fields:
   dateOfBirth      — Date of birth strictly in YYYY-MM-DD format (e.g. 1998-01-15). null if not readable.
   nidNumber        — The NID / ID number as a digit-only string (e.g. "1234567890123"). Remove all spaces, dashes, and non-digit characters. null if not found.
   address          — The primary address found on the card, in English. This is MANDATORY if any address exists. If the card shows only one address, put it here.
-  presentAddress   — Present / current address in English ONLY if the card explicitly labels it as present address (বর্তমান ঠিকানা). null if the card does not explicitly distinguish present vs permanent address.
-  permanentAddress — Permanent address in English ONLY if the card explicitly labels it as permanent address (স্থায়ী ঠিকানা). null if the card does not explicitly distinguish present vs permanent address.
+  presentAddress   — Present / current address in English ONLY if the card explicitly labels it as present address, example: (বর্তমান ঠিকানা). null if the card does not explicitly distinguish present vs permanent address.
+  permanentAddress — Permanent address in English ONLY if the card explicitly labels it as permanent address, example: (স্থায়ী ঠিকানা). null if the card does not explicitly distinguish present vs permanent address.
 
 ---
 
 ADDRESS EXTRACTION RULES
 
 - If the card shows ONE address (unlabelled or simply "ঠিকানা"): set `address` to that value. Set `presentAddress` and `permanentAddress` to null.
-- If the card shows TWO explicitly labelled addresses (বর্তমান ঠিকানা and স্থায়ী ঠিকানা): set `presentAddress` and `permanentAddress` accordingly. Also set `address` to the same value as `presentAddress` (primary).
+- If the card shows TWO explicitly labelled addresses (i.e. present address: বর্তমান ঠিকানা and permanent address: স্থায়ী ঠিকানা): set `presentAddress` and `permanentAddress` accordingly. Also set `address` to the same value as `presentAddress` (primary).
 - Never set `presentAddress` or `permanentAddress` to a value that is not explicitly labelled as such on the card.
 - Translate Bengali location names to readable English. Preserve location names accurately.
   - Example: "বাসা/হোল্ডিং: ২২ডি, রোড ১০৬, গুলশান" → "Dhaka, Bangladesh"

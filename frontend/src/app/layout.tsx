@@ -40,7 +40,7 @@ export default function RootLayout({
             </span>
             <span className="text-gray-300 text-xs">|</span>
             <span className="text-xs text-gray-500">
-              OCR + Vision AI Pipeline
+              Vision AI Pipeline
             </span>
           </div>
         </header>

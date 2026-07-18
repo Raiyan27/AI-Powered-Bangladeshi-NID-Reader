@@ -100,8 +100,20 @@ export default function FileUpload({
   const startCamera = async () => {
     setCameraError(null);
     try {
+      // Detect touch device — phones and tablets have coarse pointer and touch points.
+      // Desktops typically have no touch points and a fine/mouse pointer.
+      const isMobileOrTablet =
+        window.matchMedia("(pointer: coarse)").matches ||
+        navigator.maxTouchPoints > 0;
+
+      // Mobile/tablet → prefer rear camera for NID scanning.
+      // Desktop → no facingMode constraint; browser uses the default webcam.
+      const videoConstraints: MediaTrackConstraints = isMobileOrTablet
+        ? { facingMode: { ideal: "environment" } }
+        : true as unknown as MediaTrackConstraints;
+
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
+        video: videoConstraints,
       });
       streamRef.current = stream;
       if (videoRef.current) {
