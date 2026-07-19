@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#006A4E" />
+      <stop offset="100%" stop-color="#004D38" />
+    </linearGradient>
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#F8FAFC" />
+    </linearGradient>
+    <filter id="dropShadow" x="-10%" y="-10%" width="125%" height="125%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000000" flood-opacity="0.3" />
+    </filter>
+  </defs>
+
+  <!-- Background Circle (Bangladesh National Green) -->
+  <circle cx="256" cy="256" r="240" fill="url(#bgGrad)" />
+
+  <!-- Bangladesh National Red Sun Accent -->
+  <circle cx="190" cy="210" r="105" fill="#F42A41" opacity="0.95" />
+
+  <!-- ID Card Container -->
+  <rect x="110" y="150" width="292" height="212" rx="22" fill="url(#cardGrad)" filter="url(#dropShadow)" />
+
+  <!-- Card Top Header Bar -->
+  <path d="M 110 172 A 22 22 0 0 1 132 150 L 380 150 A 22 22 0 0 1 402 172 L 402 195 L 110 195 Z" fill="#006A4E" />
+
+  <!-- Header Title Mock Lines -->
+  <rect x="135" y="167" width="110" height="12" rx="4" fill="#FFFFFF" opacity="0.9" />
+
+  <!-- Avatar Photo Box -->
+  <rect x="138" y="215" width="68" height="82" rx="10" fill="#E2E8F0" stroke="#CBD5E1" stroke-width="2" />
+
+  <!-- Avatar Silhouette -->
+  <circle cx="172" cy="245" r="18" fill="#64748B" />
+  <path d="M146 292 C146 274, 198 274, 198 292 Z" fill="#64748B" />
+
+  <!-- Text Lines on ID Card -->
+  <rect x="224" y="222" width="154" height="14" rx="4" fill="#2563EB" />
+  <rect x="224" y="246" width="124" height="11" rx="3" fill="#64748B" />
+  <rect x="224" y="266" width="140" height="11" rx="3" fill="#64748B" />
+  <rect x="224" y="286" width="96" height="11" rx="3" fill="#006A4E" />
+
+  <!-- Smart Card Microchip Icon -->
+  <rect x="138" y="312" width="38" height="24" rx="5" fill="#F59E0B" stroke="#D97706" stroke-width="1.5" />
+  <line x1="157" y1="312" x2="157" y2="336" stroke="#D97706" stroke-width="1.5" />
+  <line x1="138" y1="324" x2="176" y2="324" stroke="#D97706" stroke-width="1.5" />
+</svg>

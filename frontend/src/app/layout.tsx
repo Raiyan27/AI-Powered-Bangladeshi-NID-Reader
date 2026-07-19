@@ -13,6 +13,9 @@ export const metadata: Metadata = {
   description:
     "Extract structured information from Bangladesh National ID cards using a hybrid OCR + Vision AI pipeline. Supports Bengali and English text.",
   keywords: ["Bangladesh NID", "ID card reader", "OCR", "AI extraction", "NID extractor"],
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

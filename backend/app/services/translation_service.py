@@ -129,7 +129,26 @@ def normalize_blood_group(bg: str | None) -> str | None:
 
     bg = bg.strip().upper()
     bg = convert_bengali_digits(bg)
-    match = re.search(r"\b(A|B|AB|O)\s*([\+\-])", bg)
-    if match:
-        return f"{match.group(1)}{match.group(2)}"
+
+    # Detect Rh factor: positive (+) vs negative (-)
+    is_negative = bool(re.search(r"(\-|NEG|VE\-|\-\s*VE)", bg))
+    is_positive = bool(re.search(r"(\+|POS|VE\+|\+\s*VE)", bg))
+
+    # ABO group matching — AB MUST precede A and B to prevent partial prefix matches
+    match_group = re.search(r"\b(AB|A|B|O)\b", bg)
+    if not match_group:
+        match_group = re.search(r"(AB|A|B|O)", bg)
+
+    if match_group:
+        abo = match_group.group(1)
+        if is_negative and not is_positive:
+            return f"{abo}-"
+        if is_positive:
+            return f"{abo}+"
+        # Direct sign attachment fallback
+        sign_match = re.search(r"([\+\-])", bg)
+        if sign_match:
+            return f"{abo}{sign_match.group(1)}"
+        return abo
+
     return bg if bg else None

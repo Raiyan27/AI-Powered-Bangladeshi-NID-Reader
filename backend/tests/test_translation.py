@@ -6,6 +6,7 @@ from app.services.translation_service import (
     normalize_nid_number,
     normalize_name,
     normalize_address,
+    normalize_blood_group,
 )
 
 
@@ -86,3 +87,26 @@ class TestNormalizeAddress:
 
     def test_empty_returns_none(self):
         assert normalize_address("") is None
+
+
+class TestNormalizeBloodGroup:
+    def test_standard_groups(self):
+        assert normalize_blood_group("O+") == "O+"
+        assert normalize_blood_group("A+") == "A+"
+        assert normalize_blood_group("B+") == "B+"
+        assert normalize_blood_group("AB+") == "AB+"
+        assert normalize_blood_group("O-") == "O-"
+        assert normalize_blood_group("A-") == "A-"
+        assert normalize_blood_group("B-") == "B-"
+        assert normalize_blood_group("AB-") == "AB-"
+
+    def test_variant_notations(self):
+        assert normalize_blood_group("O +ve") == "O+"
+        assert normalize_blood_group("B+ve") == "B+"
+        assert normalize_blood_group("AB +ve") == "AB+"
+        assert normalize_blood_group("A POSITIVE") == "A+"
+        assert normalize_blood_group("O-ve") == "O-"
+
+    def test_none_and_empty(self):
+        assert normalize_blood_group(None) is None
+        assert normalize_blood_group("") is None

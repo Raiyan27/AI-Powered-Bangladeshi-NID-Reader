@@ -51,13 +51,14 @@ EXTRACTION RULES
 
 1. Extract data from what is VISUALLY PRESENT in the images. Do not invent or guess missing information.
 2. If isFrontBangladeshNID is false, set all front-side fields (name, fatherName, motherName, spouseName, dateOfBirth, nidNumber) to null.
-3. If isBackBangladeshNID is false, set all back-side fields (address, presentAddress, permanentAddress) to null.
+3. If isBackBangladeshNID is false, set all back-side fields (address, presentAddress, permanentAddress, bloodGroup) to null.
 4. Name fields: use the English transliteration printed on the card when available. If only Bengali is present, transliterate accurately.
    - Bengali example: "মোঃ ফিরোজ আল আজাদ" → "Abdul Karim"
    - Bengali example: "তাছলিমা আক্তার রেহেন" → "Amena Begum"
 5. Do NOT mix up name fields — spouseName is a separate field from fatherName and motherName.
 6. dateOfBirth must always be YYYY-MM-DD. Convert from any format (e.g. "15 Jan 1998" → "1998-01-15").
 7. nidNumber: digits only — strip spaces, dashes, and any non-digit characters.
+8. bloodGroup: Inspect the BACK image (and front image) carefully. Smart cards print "Blood Group:" or "রক্তের গ্রুপ:" (e.g. "O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-"). Always extract it if visible. Set to null only if not present.
 8. If a field is partially visible, unreadable, obscured, or genuinely absent, set it to null. Never guess.
 9. Handle image quality issues gracefully: glare, blur, shadow, perspective distortion, and partial crops should not cause hallucinations.
 10. The card may be rotated — read the content regardless of orientation.
