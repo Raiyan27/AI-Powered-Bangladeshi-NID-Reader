@@ -20,15 +20,7 @@ export default function FileUpload({
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [dragOver, setDragOver] = useState(false);
-  const [inputMode, setInputMode] = useState<"upload" | "camera">("upload");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
 
   // Reset when parent clears the file
   useEffect(() => {
@@ -36,25 +28,8 @@ export default function FileUpload({
       setPreview(null);
       setFileName("");
       if (fileInputRef.current) fileInputRef.current.value = "";
-      if (cameraInputRef.current) cameraInputRef.current.value = "";
-      stopCamera();
-      setDevices([]);
-      setSelectedDeviceId("");
     }
   }, [initialFile]);
-
-  // Clean up camera on unmount
-  useEffect(() => {
-    return () => stopCamera();
-  }, []);
-
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    setCameraActive(false);
-  };
 
   const handleFile = useCallback(
     (file: File | null) => {
@@ -96,227 +71,13 @@ export default function FileUpload({
     setFileName("");
     onFileSelect(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
-    stopCamera();
-    setDevices([]);
-    setSelectedDeviceId("");
-  };
-
-  // --- Camera helpers ---
-
-  const startCamera = async (deviceId?: string) => {
-    setCameraError(null);
-
-    // Stop the existing camera first before opening a new stream to prevent locks
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraError(
-        "Camera access is not supported by your browser or environment (requires HTTPS)."
-      );
-      return;
-    }
-
-    try {
-      // Detect touch device — phones and tablets have coarse pointer and touch points.
-      // Desktops typically have no touch points and a fine/mouse pointer.
-      const isMobileOrTablet =
-        /Mobi|Android|iPhone|iPad|Tablet|Nexus|PlayBook|Silk/i.test(navigator.userAgent) ||
-        window.matchMedia("(pointer: coarse)").matches ||
-        navigator.maxTouchPoints > 0;
-
-      let stream: MediaStream;
-
-      if (isMobileOrTablet) {
-        // Mobile/Tablet requirement: Use default camera, prefer rear-facing, fall back to front-facing
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: "environment" } },
-          });
-        } catch (err) {
-          console.warn("Ideal environment camera failed, falling back to front camera", err);
-          try {
-            stream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: "user" },
-            });
-          } catch (err2) {
-            console.warn("Front camera failed, falling back to default camera", err2);
-            stream = await navigator.mediaDevices.getUserMedia({
-              video: true,
-            });
-          }
-        }
-      } else {
-        // Desktop/Laptop requirement: Use first available camera by default, do not force facingMode.
-        // If a specific deviceId is selected, use it. Otherwise, request default video: true.
-        const videoConstraints = deviceId
-          ? { deviceId: { exact: deviceId } }
-          : true;
-
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: videoConstraints,
-        });
-      }
-
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setCameraActive(true);
-
-      // Enumerate available video inputs to build the list
-      try {
-        const allDevices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = allDevices.filter((d) => d.kind === "videoinput");
-        setDevices(videoDevices);
-
-        // Find the active device id
-        const activeTrack = stream.getVideoTracks()[0];
-        const activeSettings = activeTrack?.getSettings();
-        const activeDeviceId = activeSettings?.deviceId;
-
-        if (activeDeviceId) {
-          setSelectedDeviceId(activeDeviceId);
-        } else if (videoDevices.length > 0 && !selectedDeviceId) {
-          setSelectedDeviceId(videoDevices[0].deviceId);
-        }
-      } catch (enumErr) {
-        console.warn("Failed to enumerate media devices:", enumErr);
-      }
-
-    } catch (err) {
-      console.error("Camera start failed:", err);
-      setCameraError(
-        "Camera access denied or not available. Please allow camera access or use file upload."
-      );
-    }
-  };
-
-  const handleCameraChange = (deviceId: string) => {
-    setSelectedDeviceId(deviceId);
-    startCamera(deviceId);
-  };
-
-  const capturePhoto = async () => {
-    if (!videoRef.current || !streamRef.current) return;
-    const video = videoRef.current;
-    const track = streamRef.current.getVideoTracks()[0];
-
-    if (!track) {
-      console.warn("[Camera Capture] No video track found to capture from.");
-      return;
-    }
-
-    // Try ImageCapture API first (delivers full native photographic resolution from hardware sensor)
-    if ("ImageCapture" in window) {
-      try {
-        console.log("[Camera Capture] Attempting native hardware ImageCapture snapshot...");
-        // @ts-ignore
-        const imageCapture = new window.ImageCapture(track);
-        // @ts-ignore
-        const blob = await imageCapture.takePhoto();
-        console.log(`[Camera Capture] Native ImageCapture successful: ${blob.size} bytes`);
-        const captured = new File([blob], `${id}-capture.jpg`, { type: "image/jpeg" });
-        stopCamera();
-        handleFile(captured);
-        return;
-      } catch (err) {
-        console.warn("[Camera Capture] Native ImageCapture failed, falling back to canvas", err);
-      }
-    }
-
-    // Fallback: high-quality canvas draw
-    if (!video.videoWidth || !video.videoHeight) {
-      console.warn("[Camera Capture] Video dimensions are invalid (0x0).");
-      return;
-    }
-
-    console.log(`[Camera Capture] Canvas fallback capture size: ${video.videoWidth}x${video.videoHeight}`);
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    
-    // Enable high-quality image smoothing
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    
-    ctx.drawImage(video, 0, 0);
-
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) return;
-        console.log(`[Camera Capture] Canvas capture successful: ${blob.size} bytes`);
-        const captured = new File([blob], `${id}-capture.jpg`, { type: "image/jpeg" });
-        stopCamera();
-        handleFile(captured);
-      },
-      "image/jpeg",
-      0.95 // Bump quality to 95%
-    );
-  };
-
-  const switchMode = (mode: "upload" | "camera") => {
-    stopCamera();
-    setInputMode(mode);
-    setCameraError(null);
-    if (mode === "camera") {
-      // brief delay so the video element mounts
-      setTimeout(() => startCamera(), 50);
-    }
   };
 
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between mb-2">
-        <label htmlFor={id} className="block text-sm font-medium text-gray-700">
-          {label}
-        </label>
-
-        {/* Upload / Camera toggle */}
-        <div className="flex items-center gap-1 bg-gray-100 rounded-md p-0.5 text-xs">
-          <button
-            type="button"
-            onClick={() => switchMode("upload")}
-            title="Upload from device"
-            className={`flex items-center gap-1 px-2 py-1 rounded transition-all cursor-pointer ${
-              inputMode === "upload"
-                ? "bg-white text-gray-800 shadow-sm font-medium"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {/* Upload icon */}
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            Upload
-          </button>
-          <button
-            type="button"
-            onClick={() => switchMode("camera")}
-            title="Use camera"
-            className={`flex items-center gap-1 px-2 py-1 rounded transition-all cursor-pointer ${
-              inputMode === "camera"
-                ? "bg-white text-gray-800 shadow-sm font-medium"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {/* Camera icon */}
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            Camera
-          </button>
-        </div>
-      </div>
+      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-2">
+        {label}
+      </label>
 
       {/* Preview */}
       {preview ? (
@@ -337,74 +98,6 @@ export default function FileUpload({
             </button>
           </div>
         </div>
-
-      ) : inputMode === "camera" ? (
-        /* Camera viewfinder */
-        <div className="border-2 border-dashed border-blue-300 rounded-lg overflow-hidden bg-black relative">
-          {cameraError ? (
-            <div className="flex flex-col items-center justify-center h-44 px-4 text-center gap-2">
-              <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                  d="M12 9v2m0 4h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
-              </svg>
-              <p className="text-xs text-red-400">{cameraError}</p>
-              <button
-                type="button"
-                onClick={() => switchMode("upload")}
-                className="text-xs text-blue-600 underline cursor-pointer"
-              >
-                Switch to file upload
-              </button>
-            </div>
-          ) : cameraActive ? (
-            <div className="relative">
-              <video
-                ref={videoRef}
-                className="w-full h-44 object-cover"
-                playsInline
-                muted
-              />
-              {/* Camera switcher dropdown */}
-              {devices.length > 1 && (
-                <div className="absolute top-2 right-2 max-w-[180px] bg-black/60 backdrop-blur-sm rounded px-1.5 py-0.5 text-[10px] text-white z-10 border border-white/10">
-                  <select
-                    value={selectedDeviceId}
-                    onChange={(e) => handleCameraChange(e.target.value)}
-                    className="bg-transparent text-white border-none outline-none w-full cursor-pointer pr-4 py-0.5"
-                  >
-                    {devices.map((device, idx) => (
-                      <option key={device.deviceId} value={device.deviceId} className="bg-gray-800 text-white">
-                        {device.label || `Camera ${idx + 1}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {/* Capture button overlay */}
-              <div className="absolute bottom-2 left-0 right-0 flex justify-center">
-                <button
-                  type="button"
-                  id={`${id}-capture`}
-                  onClick={capturePhoto}
-                  className="w-12 h-12 rounded-full bg-white border-4 border-blue-500 shadow-lg flex items-center justify-center cursor-pointer hover:scale-105 transition-transform active:scale-95"
-                  title="Capture photo"
-                >
-                  <div className="w-8 h-8 rounded-full bg-blue-500" />
-                </button>
-              </div>
-            </div>
-          ) : (
-            /* Starting camera spinner */
-            <div className="flex flex-col items-center justify-center h-44 gap-2">
-              <svg className="animate-spin w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <p className="text-xs text-gray-400">Starting camera…</p>
-            </div>
-          )}
-        </div>
-
       ) : (
         /* File upload drop zone */
         <div
@@ -442,3 +135,4 @@ export default function FileUpload({
     </div>
   );
 }
+
