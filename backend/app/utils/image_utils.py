@@ -44,42 +44,14 @@ def read_exif_rotation(image_bytes: bytes) -> int:
         return 0
 
 
-def is_combined_image(image_bytes: bytes) -> bool:
-    """Check if an image is a combined scan/photocopy containing both front and back sides.
-
-    Detection rules:
-    - Vertically stacked combined scan: height / width >= 1.15 (e.g. portrait/A4 layout containing top & bottom sides)
-    - Horizontally side-by-side combined scan: width / height >= 2.2 (e.g. wide layout containing left & right sides)
-    Standard single NID card aspect ratio (width / height) is ~1.4 to 1.6 in landscape orientation.
-    """
-    try:
-        width, height = get_image_dimensions(image_bytes)
-        if width == 0 or height == 0:
-            return False
-
-        is_vertical_combined = (height / width) >= 1.15
-        is_horizontal_combined = (width / height) >= 2.2
-
-        return is_vertical_combined or is_horizontal_combined
-    except Exception:
-        return False
-
-
-def split_combined_image(image_bytes: bytes) -> tuple[bytes, bytes]:
-    """Split a combined NID image into front and back images based on layout orientation."""
+def split_image_vertically(image_bytes: bytes) -> tuple[bytes, bytes]:
+    """Split a single NID image vertically into top (front) and bottom (back) halves."""
     img = Image.open(io.BytesIO(image_bytes))
     width, height = img.size
+    midpoint = height // 2
 
-    # Check if horizontal side-by-side split is needed
-    if (width / height) >= 2.2:
-        midpoint = width // 2
-        front_img = img.crop((0, 0, midpoint, height))
-        back_img = img.crop((midpoint, 0, width, height))
-    else:
-        # Default vertical top/bottom split
-        midpoint = height // 2
-        front_img = img.crop((0, 0, width, midpoint))
-        back_img = img.crop((0, midpoint, width, height))
+    front_img = img.crop((0, 0, width, midpoint))
+    back_img = img.crop((0, midpoint, width, height))
 
     img_format = img.format or "JPEG"
 
@@ -90,8 +62,3 @@ def split_combined_image(image_bytes: bytes) -> tuple[bytes, bytes]:
     back_img.save(back_io, format=img_format)
 
     return front_io.getvalue(), back_io.getvalue()
-
-
-def split_image_vertically(image_bytes: bytes) -> tuple[bytes, bytes]:
-    """Split a single NID image vertically into top (front) and bottom (back) halves."""
-    return split_combined_image(image_bytes)

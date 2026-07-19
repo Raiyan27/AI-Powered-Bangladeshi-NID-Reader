@@ -37,27 +37,18 @@ async def extract_nid_endpoint(
         if not front_bytes:
             return _error_response("MISSING_FRONT_IMAGE", "Front side image is required.", 400)
 
-        # If back image is not provided, check if the front image is a combined scan
+        # If back image is not provided, split the front NID image vertically
         if not back or not back.filename:
-            from app.utils.image_utils import is_combined_image, split_combined_image
-
-            if is_combined_image(front_bytes):
-                logger.info("Back image missing, but front image is a combined scan — auto-splitting into front and back")
-                try:
-                    front_bytes, back_bytes = split_combined_image(front_bytes)
-                    back_filename = f"back_{front.filename}"
-                except Exception as e:
-                    logger.error(f"Failed to auto-split combined image: {e}")
-                    return _error_response(
-                        "INVALID_IMAGE_FORMAT",
-                        "Failed to process combined NID image. Make sure it is a valid image containing both sides.",
-                        400,
-                    )
-            else:
-                logger.info("Back image is missing and front image is not a combined scan")
+            logger.info("Back image is missing; auto-splitting front image vertically")
+            try:
+                from app.utils.image_utils import split_image_vertically
+                front_bytes, back_bytes = split_image_vertically(front_bytes)
+                back_filename = f"back_{front.filename}"
+            except Exception as e:
+                logger.error(f"Failed to auto-split combined image: {e}")
                 return _error_response(
-                    "MISSING_BACK_IMAGE",
-                    "Back side image is required. Please upload both front and back images, or a single combined scan containing both sides.",
+                    "INVALID_IMAGE_FORMAT",
+                    "Failed to process combined NID image. Make sure it is a valid image containing both sides.",
                     400,
                 )
         else:

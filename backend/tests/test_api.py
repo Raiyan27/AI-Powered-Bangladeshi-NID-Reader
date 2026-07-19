@@ -41,31 +41,19 @@ class TestExtractEndpoint:
         assert response.status_code in (422, 400)
 
     @patch("app.services.extraction_service.extract_with_vision", new_callable=AsyncMock)
-    def test_missing_back_image_auto_split_on_combined_scan(self, mock_vision):
-        """Omitting back image on a combined scan (height > width) auto-splits and succeeds."""
+    def test_missing_back_image_auto_split(self, mock_vision):
+        """Omitting the back image is allowed — treated as a combined NID image."""
         from app.schemas.nid import NIDData
         mock_vision.return_value = NIDData(name="Test User")
-        combined_data = _create_test_image(width=200, height=300)
+        front_data = _create_test_image()
         response = client.post(
             "/extract",
-            files={"front": ("combined.png", combined_data, "image/png")},
+            files={"front": ("front.png", front_data, "image/png")},
         )
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         assert data["data"]["name"] == "Test User"
-
-    def test_missing_back_image_on_single_card_returns_error(self):
-        """Omitting back image on a single front card (width > height) returns MISSING_BACK_IMAGE."""
-        single_card_data = _create_test_image(width=300, height=200)
-        response = client.post(
-            "/extract",
-            files={"front": ("front_only.png", single_card_data, "image/png")},
-        )
-        assert response.status_code == 400
-        data = response.json()
-        assert data["success"] is False
-        assert data["error"]["code"] == "MISSING_BACK_IMAGE"
 
     def test_invalid_file_format(self):
         front_data = _create_test_image()
