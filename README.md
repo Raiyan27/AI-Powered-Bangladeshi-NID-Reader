@@ -156,7 +156,7 @@ docker compose up --build
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `OPENROUTER_API_KEY` | Yes | — | Your OpenRouter API key |
-| `OPENROUTER_MODEL` | No | `google/gemini-2.5-flash` | Vision LLM model to use |
+| `OPENROUTER_MODEL` | No | `google/gemini-3.1-flash-lite` | Vision LLM model to use |
 | `OPENROUTER_API_URL` | No | `https://openrouter.ai/api/v1/chat/completions` | Vision API endpoint URL |
 | `APP_ENV` | No | `dev` | Environment mode (`dev` or `prod`) |
 | `CORS_ORIGINS` | No | `http://localhost:3000` | Comma-separated allowed CORS origins |
@@ -187,14 +187,14 @@ Extracts NID information from uploaded images.
 {
   "success": true,
   "data": {
-    "name": "Md Rahim",
-    "fatherName": "Abdul Karim",
-    "motherName": "Amena Begum",
+    "name": "Md. Junaed",
+    "fatherName": "Md. Alomgir Hossain",
+    "motherName": "Mst. Rina Begum",
     "spouseName": null,
-    "dateOfBirth": "1998-01-15",
-    "nidNumber": "1234567890123",
-    "presentAddress": "Dhaka, Bangladesh",
-    "permanentAddress": "Dhaka, Bangladesh"
+    "dateOfBirth": "2005-01-15",
+    "nidNumber": "9011042852",
+    "presentAddress": "Bhairab Bazar, Station Road, Bhairab, Kishoreganj - 2311",
+    "permanentAddress": "Bhairab Bazar, Station Road, Bhairab, Kishoreganj - 2311"
   },
   "warnings": []
 }
