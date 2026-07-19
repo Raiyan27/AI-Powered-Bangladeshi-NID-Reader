@@ -11,7 +11,7 @@ services:
       - .env
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-google/gemini-2.5-flash}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-google/gemini-3.1-flash-lite}
       - APP_ENV=${APP_ENV:-dev}
     restart: unless-stopped
     healthcheck:

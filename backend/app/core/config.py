@@ -48,7 +48,7 @@ class BackendConfig(BaseModel):
 
 
 class VisionConfig(BaseModel):
-    default_model: str = "google/gemini-2.5-flash"
+    default_model: str = "google/gemini-3.1-flash-lite"
     api_url: str = "https://openrouter.ai/api/v1/chat/completions"
     max_tokens: int = 1024
     temperature: float = 0.0

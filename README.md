@@ -145,7 +145,7 @@ copy .env.example .env
 
 # 2. Set your API key in .env
 # OPENROUTER_API_KEY=your_key_here
-# OPENROUTER_MODEL=google/gemini-2.5-flash
+# OPENROUTER_MODEL=google/gemini-3.1-flash-lite
 
 # 3. Build and start everything
 docker compose up --build
