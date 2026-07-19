@@ -100,7 +100,7 @@ async def extract_with_vision(
 
     for attempt in range(1, settings.vision.retry_attempts + 1):
         try:
-            raw_content = await _call_api(payload, headers, settings.vision.timeout_s, request_id, attempt)
+            raw_content = await _call_api(payload, headers, settings.vision.timeout_s, request_id, attempt, settings.vision_api_url)
             return _parse_response(raw_content, request_id)
 
         except VisionExtractionError:
@@ -137,13 +137,13 @@ class _RetryableError(Exception):
         super().__init__(message)
 
 
-async def _call_api(payload: dict, headers: dict, timeout_s: float, request_id: str, attempt: int) -> str:
+async def _call_api(payload: dict, headers: dict, timeout_s: float, request_id: str, attempt: int, api_url: str) -> str:
     """Perform a single HTTP call to OpenRouter. Returns raw response content string."""
     timeout = httpx.Timeout(connect=10.0, read=timeout_s, write=30.0, pool=5.0)
 
     async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(
-            "https://openrouter.ai/api/v1/chat/completions",
+            api_url,
             json=payload,
             headers=headers,
         )

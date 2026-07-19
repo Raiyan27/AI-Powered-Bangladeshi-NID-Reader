@@ -97,8 +97,8 @@ def preprocess_image(file_bytes: bytes) -> bytes:
         img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
         logger.info(f"Resized image from {w}x{h} to {new_w}x{new_h}")
 
-    # Re-encode as JPEG at quality=95 for high visual fidelity
-    return numpy_to_jpeg(img, quality=95)
+    # Re-encode as JPEG for high visual fidelity
+    return numpy_to_jpeg(img, quality=settings.backend.jpeg_quality)
 
 
 # ---------------------------------------------------------------------------
