@@ -156,7 +156,11 @@ docker compose up --build
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `OPENROUTER_API_KEY` | Yes | — | Your OpenRouter API key |
-| `OPENROUTER_MODEL` | No | `google/gemini-2.5-flash` | Vision model to use |
+| `OPENROUTER_MODEL` | No | `google/gemini-2.5-flash` | Vision LLM model to use |
+| `OPENROUTER_API_URL` | No | `https://openrouter.ai/api/v1/chat/completions` | Vision API endpoint URL |
+| `APP_ENV` | No | `dev` | Environment mode (`dev` or `prod`) |
+| `CORS_ORIGINS` | No | `http://localhost:3000` | Comma-separated allowed CORS origins |
+| `NEXT_PUBLIC_API_URL` | No | `http://localhost:8000` | Backend API URL for frontend |
 
 ## API Documentation
 
