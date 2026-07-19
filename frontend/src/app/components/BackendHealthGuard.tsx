@@ -8,15 +8,16 @@ interface BackendHealthGuardProps {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-const POLL_INTERVAL_SECONDS = 5;
+const CYCLE_MS = 5000;
+const TICK_MS = 100;
 const HEALTH_TIMEOUT_MS = 8000;
 
 export default function BackendHealthGuard({ children }: BackendHealthGuardProps) {
   const [isProd, setIsProd] = useState<boolean>(false);
   const [status, setStatus] = useState<"init" | "checking" | "sleeping" | "live">("init");
   const [retryCount, setRetryCount] = useState<number>(0);
-  const [countdown, setCountdown] = useState<number>(POLL_INTERVAL_SECONDS);
-  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+  const [cycleMs, setCycleMs] = useState<number>(0);
+  const [totalMs, setTotalMs] = useState<number>(0);
 
   const isCheckingRef = useRef<boolean>(false);
   const checkHealthRef = useRef<() => Promise<void>>(async () => {});
@@ -82,28 +83,29 @@ export default function BackendHealthGuard({ children }: BackendHealthGuardProps
     checkHealth();
   }, [isProd, checkHealth]);
 
-  // 1-second ticker when server is sleeping
+  // 100ms fluid animation ticker when server is sleeping
   useEffect(() => {
     if (!isProd || status !== "sleeping") return;
 
     const ticker = setInterval(() => {
-      setElapsedSeconds((prev) => prev + 1);
-      setCountdown((prevCount) => {
-        if (prevCount <= 1) {
-          // Trigger next health check
+      setTotalMs((prev) => prev + TICK_MS);
+      setCycleMs((prevCycle) => {
+        const nextCycle = prevCycle + TICK_MS;
+        if (nextCycle >= CYCLE_MS) {
+          // Trigger health check at the end of each 5s cycle
           checkHealthRef.current();
-          return POLL_INTERVAL_SECONDS;
+          return 0;
         }
-        return prevCount - 1;
+        return nextCycle;
       });
-    }, 1000);
+    }, TICK_MS);
 
     return () => clearInterval(ticker);
   }, [isProd, status]);
 
   const handleManualRetry = () => {
     setStatus("checking");
-    setCountdown(POLL_INTERVAL_SECONDS);
+    setCycleMs(0);
     checkHealth();
   };
 
@@ -112,11 +114,11 @@ export default function BackendHealthGuard({ children }: BackendHealthGuardProps
     return (
       <>
         {isProd && (
-          <div className="w-full bg-emerald-50 border-b border-emerald-200 py-1.5 px-4 text-center">
+          <div className="w-full bg-emerald-50/80 border-b border-emerald-200/80 py-2 px-4 text-center backdrop-blur-sm">
             <div className="max-w-2xl mx-auto flex items-center justify-center gap-2 text-xs font-semibold text-emerald-800">
-              <span className="relative flex h-2 w-2">
+              <span className="relative flex h-2.5 w-2.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
               </span>
               <span>Backend Status: Online &amp; Live</span>
             </div>
@@ -140,19 +142,21 @@ export default function BackendHealthGuard({ children }: BackendHealthGuardProps
     );
   }
 
-  // Calculate dynamic progress bar percentage (0% to 100% per 5-second interval)
-  const progressPercent = Math.min(100, Math.max(0, ((POLL_INTERVAL_SECONDS - countdown) / POLL_INTERVAL_SECONDS) * 100));
+  // Calculate fluid progress bar percentage (0% -> 100%) and remaining seconds
+  const progressPercent = Math.min(100, Math.max(0, (cycleMs / CYCLE_MS) * 100));
+  const secondsRemaining = Math.max(1, Math.ceil((CYCLE_MS - cycleMs) / 1000));
+  const totalElapsedSec = Math.floor(totalMs / 1000);
 
-  // 3. Sleeping / Waking Up full-page UI screen in Prod mode
+  // 3. Sleeping / Waking Up full-page UI screen in Prod mode (Indigo/Blue Theme)
   return (
     <div className="min-h-[70vh] flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md bg-white border border-gray-200 rounded-xl p-6 shadow-sm text-center space-y-6">
+      <div className="w-full max-w-md bg-white border border-gray-200/90 rounded-2xl p-7 shadow-xl shadow-blue-500/5 text-center space-y-6">
         {/* Graphic */}
         <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
-          <div className="absolute inset-0 rounded-full border-4 border-amber-100 animate-ping opacity-75" />
-          <div className="relative w-12 h-12 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center">
+          <div className="absolute inset-0 rounded-full border-4 border-blue-100 animate-ping opacity-60" />
+          <div className="relative w-12 h-12 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center shadow-inner">
             <svg
-              className="w-6 h-6 text-amber-600 animate-spin"
+              className="w-6 h-6 text-blue-600 animate-spin"
               fill="none"
               viewBox="0 0 24 24"
             >
@@ -175,37 +179,37 @@ export default function BackendHealthGuard({ children }: BackendHealthGuardProps
 
         {/* Informative Text */}
         <div className="space-y-2">
-          <h2 className="text-lg font-semibold text-gray-900">
+          <h2 className="text-xl font-bold text-gray-900 tracking-tight">
             Waking up the server…
           </h2>
-          <p className="text-sm text-gray-500 leading-relaxed">
-            The backend is starting up after inactivity. On Render&apos;s free tier, cold-start takes approximately{" "}
+          <p className="text-sm text-gray-500 leading-relaxed max-w-xs mx-auto">
+            The backend is spinning up after inactivity. On Render&apos;s free tier, cold-start takes approximately{" "}
             <span className="font-semibold text-gray-800">30–60 seconds</span>.
           </p>
         </div>
 
-        {/* Countdown & Progress Bar Box */}
-        <div className="bg-amber-50/60 rounded-lg p-4 border border-amber-100 space-y-3">
-          <div className="flex items-center justify-between text-xs text-amber-900 font-medium">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              Retrying in <span className="font-bold text-amber-800 font-mono text-sm">{countdown}s</span>
+        {/* Fluid Progress Box */}
+        <div className="bg-slate-50/90 rounded-xl p-4 border border-gray-200/80 space-y-3 shadow-inner">
+          <div className="flex items-center justify-between text-xs text-gray-700 font-medium">
+            <span className="flex items-center gap-1.5 font-semibold text-blue-700">
+              <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+              Retrying in <span className="font-bold text-blue-900 font-mono">{secondsRemaining}s</span>
             </span>
-            <span className="text-amber-700 font-mono">Attempt #{retryCount}</span>
+            <span className="text-gray-500 font-mono">Attempt #{retryCount}</span>
           </div>
 
-          {/* Smooth Dynamic Progress Bar */}
-          <div className="w-full bg-amber-200/70 h-2 rounded-full overflow-hidden">
+          {/* Smooth Fluid Progress Bar (0% to 100% left-to-right) */}
+          <div className="w-full bg-gray-200/80 h-2.5 rounded-full overflow-hidden p-0.5 border border-gray-200/50">
             <div
-              className="bg-amber-500 h-full rounded-full transition-all duration-300 ease-linear"
+              className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full transition-all duration-100 ease-linear shadow-sm"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
 
           {/* Waiting Time Display */}
-          <div className="flex items-center justify-between text-[11px] text-amber-700 font-mono pt-0.5">
+          <div className="flex items-center justify-between text-[11px] text-gray-500 font-mono pt-0.5">
             <span>Total Elapsed Wait:</span>
-            <span className="font-bold text-amber-900">{elapsedSeconds}s</span>
+            <span className="font-bold text-gray-800">{totalElapsedSec}s</span>
           </div>
         </div>
 
@@ -213,7 +217,7 @@ export default function BackendHealthGuard({ children }: BackendHealthGuardProps
         <button
           type="button"
           onClick={handleManualRetry}
-          className="w-full py-2.5 px-4 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 transition-all cursor-pointer shadow-sm"
+          className="w-full py-3 px-4 rounded-xl text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 active:from-blue-800 active:to-indigo-800 transition-all duration-150 cursor-pointer shadow-md shadow-blue-500/20"
         >
           Retry Now
         </button>
