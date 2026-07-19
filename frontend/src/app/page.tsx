@@ -16,6 +16,7 @@ interface NIDData {
   address: string | null;
   presentAddress: string | null;
   permanentAddress: string | null;
+  bloodGroup: string | null;
 }
 
 interface ApiError {

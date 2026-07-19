@@ -1,5 +1,9 @@
 # Bangladesh NID Extractor
 
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://ai-powered-bangladeshi-nid-reader.vercel.app)
+
+**Live Preview:** [https://ai-powered-bangladeshi-nid-reader.vercel.app](https://ai-powered-bangladeshi-nid-reader.vercel.app)
+
 An AI-powered web application that extracts structured information from Bangladesh National ID (NID) cards. Supports Bengali, English, and mixed-text cards, including both old laminated and new smart-card formats.
 
 ## Overview

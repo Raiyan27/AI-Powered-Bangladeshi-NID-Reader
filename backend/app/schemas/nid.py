@@ -12,3 +12,4 @@ class NIDData(BaseModel):
     address: str | None = None
     presentAddress: str | None = None
     permanentAddress: str | None = None
+    bloodGroup: str | None = None

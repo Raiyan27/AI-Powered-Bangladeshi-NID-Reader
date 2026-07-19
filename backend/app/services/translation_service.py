@@ -120,3 +120,16 @@ def normalize_address(address: str | None) -> str | None:
     address = address.strip()
     address = re.sub(r"\s+", " ", address)
     return address or None
+
+
+def normalize_blood_group(bg: str | None) -> str | None:
+    """Normalize blood group strings (e.g. 'O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-')."""
+    if not bg:
+        return None
+
+    bg = bg.strip().upper()
+    bg = convert_bengali_digits(bg)
+    match = re.search(r"\b(A|B|AB|O)\s*([\+\-])", bg)
+    if match:
+        return f"{match.group(1)}{match.group(2)}"
+    return bg if bg else None

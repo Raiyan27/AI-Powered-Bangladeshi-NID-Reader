@@ -10,6 +10,7 @@ interface NIDData {
   address: string | null;
   presentAddress: string | null;
   permanentAddress: string | null;
+  bloodGroup: string | null;
 }
 
 interface ResultViewerProps {
@@ -18,7 +19,7 @@ interface ResultViewerProps {
   copied?: boolean;
 }
 
-// Core fields always shown
+// Core fields list
 const CORE_FIELDS: { key: keyof NIDData; label: string; icon: string }[] = [
   { key: "name", label: "Full Name", icon: "👤" },
   { key: "fatherName", label: "Father's Name", icon: "👨" },
@@ -26,6 +27,7 @@ const CORE_FIELDS: { key: keyof NIDData; label: string; icon: string }[] = [
   { key: "spouseName", label: "Spouse's Name", icon: "💍" },
   { key: "dateOfBirth", label: "Date of Birth", icon: "🎂" },
   { key: "nidNumber", label: "NID Number", icon: "🪪" },
+  { key: "bloodGroup", label: "Blood Group", icon: "🩸" },
 ];
 
 // Address fields — rendered with special logic
@@ -40,14 +42,27 @@ export default function ResultViewer({
   onCopyJson,
   copied = false,
 }: ResultViewerProps) {
-  // Count non-null, non-empty values across all fields
-  const allValues = Object.values(data).filter(
-    (v) => v !== null && v !== undefined && String(v).trim() !== ""
-  );
-  const detectedCount = allValues.length;
-  const totalCount = CORE_FIELDS.length + 1; // +1 for address group
+  const hasSpouse = Boolean(data.spouseName && String(data.spouseName).trim());
+  const hasBloodGroup = Boolean(data.bloodGroup && String(data.bloodGroup).trim());
 
-  // Determine which address fields to show
+  // Dynamic field counting logic:
+  // Baseline mandatory count is 6 (Name, Father, Mother, DOB, NID Number, Address).
+  // Optional fields (spouseName, bloodGroup) dynamically increment totalCount only when present.
+  let totalCount = 6;
+  if (hasSpouse) totalCount += 1;
+  if (hasBloodGroup) totalCount += 1;
+
+  let detectedCount = 0;
+  if (data.name && String(data.name).trim()) detectedCount += 1;
+  if (data.fatherName && String(data.fatherName).trim()) detectedCount += 1;
+  if (data.motherName && String(data.motherName).trim()) detectedCount += 1;
+  if (data.dateOfBirth && String(data.dateOfBirth).trim()) detectedCount += 1;
+  if (data.nidNumber && String(data.nidNumber).trim()) detectedCount += 1;
+  if (data.address || data.presentAddress || data.permanentAddress) detectedCount += 1;
+  if (hasSpouse) detectedCount += 1;
+  if (hasBloodGroup) detectedCount += 1;
+
+  // Determine if smart-card dual addresses exist
   const hasPresentOrPermanent = data.presentAddress || data.permanentAddress;
 
   return (
@@ -57,17 +72,17 @@ export default function ResultViewer({
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-green-500" />
           <h2 className="text-sm font-semibold text-gray-800">Extracted Information</h2>
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-gray-500 font-medium">
             ({detectedCount}/{totalCount} fields)
           </span>
         </div>
         <button
           id="copy-json-button"
           onClick={onCopyJson}
-          className={`text-xs font-medium cursor-pointer transition-colors px-2 py-1 rounded ${
+          className={`text-xs font-medium cursor-pointer transition-colors px-2.5 py-1 rounded-md border ${
             copied
-              ? "text-green-600 bg-green-50"
-              : "text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+              ? "text-green-700 bg-green-50 border-green-200 font-semibold"
+              : "text-blue-600 bg-white border-gray-200 hover:bg-blue-50 hover:border-blue-200"
           }`}
         >
           {copied ? "✓ Copied!" : "Copy JSON"}
@@ -79,8 +94,8 @@ export default function ResultViewer({
         {/* Core fields */}
         {CORE_FIELDS.map(({ key, label, icon }) => {
           const value = data[key];
-          // Skip optional fields that are null
-          if ((key === "spouseName") && !value) return null;
+          // Skip optional fields when not present
+          if ((key === "spouseName" || key === "bloodGroup") && !value) return null;
           return (
             <div key={key} className="flex items-start gap-3 px-5 py-3.5">
               <span className="text-base mt-0.5 shrink-0">{icon}</span>
@@ -116,7 +131,7 @@ export default function ResultViewer({
             })}
           </>
         ) : (
-          /* Old card / single address */
+          /* Standard card / single address */
           <div className="flex items-start gap-3 px-5 py-3.5">
             <span className="text-base mt-0.5 shrink-0">📍</span>
             <div className="flex-1 min-w-0">

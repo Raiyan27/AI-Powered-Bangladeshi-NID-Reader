@@ -10,6 +10,7 @@ from app.services.translation_service import (
     normalize_nid_number,
     normalize_name,
     normalize_address,
+    normalize_blood_group,
 )
 from app.services.validation_service import validate_extraction
 
@@ -66,6 +67,7 @@ async def extract_nid(
         address=normalize_address(vision_result.address),
         presentAddress=normalize_address(vision_result.presentAddress),
         permanentAddress=normalize_address(vision_result.permanentAddress),
+        bloodGroup=normalize_blood_group(vision_result.bloodGroup),
     )
 
     # Step 5: Validate

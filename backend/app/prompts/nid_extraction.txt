@@ -19,6 +19,7 @@ Analyse both images visually and extract the following fields:
   address              — The primary address found on the card, in English. This is MANDATORY if any address exists. If the card shows only one address, put it here.
   presentAddress       — Present / current address in English ONLY if the card explicitly labels it as present address, example: (বর্তমান ঠিকানা). null if the card does not explicitly distinguish present vs permanent address.
   permanentAddress     — Permanent address in English ONLY if the card explicitly labels it as permanent address, example: (স্থায়ী ঠিকানা). null if the card does not explicitly distinguish present vs permanent address.
+  bloodGroup           — Cardholder's blood group (e.g. "O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-"). null if not present on the card.
 
 ---
 
@@ -79,7 +80,8 @@ Return ONLY a single valid JSON object with exactly these keys:
   "nidNumber": "...",
   "address": "...",
   "presentAddress": "...",
-  "permanentAddress": "..."
+  "permanentAddress": "...",
+  "bloodGroup": null
 }
 
 Do NOT include:
