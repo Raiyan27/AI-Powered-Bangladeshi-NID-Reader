@@ -45,13 +45,24 @@ def read_exif_rotation(image_bytes: bytes) -> int:
 
 
 def split_image_vertically(image_bytes: bytes) -> tuple[bytes, bytes]:
-    """Split a single NID image vertically into top (front) and bottom (back) halves."""
+    """Split a single combined NID image into front and back halves.
+
+    If width > height * 1.2, splits horizontally (left = front, right = back).
+    Otherwise splits vertically (top = front, bottom = back).
+    """
     img = Image.open(io.BytesIO(image_bytes))
     width, height = img.size
-    midpoint = height // 2
 
-    front_img = img.crop((0, 0, width, midpoint))
-    back_img = img.crop((0, midpoint, width, height))
+    if width > height * 1.2:
+        # Side-by-side arrangement
+        midpoint = width // 2
+        front_img = img.crop((0, 0, midpoint, height))
+        back_img = img.crop((midpoint, 0, width, height))
+    else:
+        # Top-and-bottom arrangement
+        midpoint = height // 2
+        front_img = img.crop((0, 0, width, midpoint))
+        back_img = img.crop((0, midpoint, width, height))
 
     img_format = img.format or "JPEG"
 

@@ -130,9 +130,13 @@ def normalize_blood_group(bg: str | None) -> str | None:
     bg = bg.strip().upper()
     bg = convert_bengali_digits(bg)
 
+    # Convert Bengali blood group terminology and Rh terms to ASCII equivalents
+    bg = bg.replace("পজিটিভ", "POS").replace("পজেটিভ", "POS").replace("নেগেটিভ", "NEG")
+    bg = bg.replace("এবি", "AB").replace("এ বি", "AB").replace("বি", "B").replace("এ", "A").replace("ও", "O")
+
     # Detect Rh factor: positive (+) vs negative (-)
-    is_negative = bool(re.search(r"(\-|NEG|VE\-|\-\s*VE)", bg))
-    is_positive = bool(re.search(r"(\+|POS|VE\+|\+\s*VE)", bg))
+    is_negative = bool(re.search(r"(\-|NEG|VE\-|\-\s*VE|\(\s*\-\s*VE\s*\)|\(\s*\-\s*\))", bg))
+    is_positive = bool(re.search(r"(\+|POS|VE\+|\+\s*VE|\(\s*\+\s*VE\s*\)|\(\s*\+\s*\))", bg))
 
     # ABO group matching — AB MUST precede A and B to prevent partial prefix matches
     match_group = re.search(r"\b(AB|A|B|O)\b", bg)

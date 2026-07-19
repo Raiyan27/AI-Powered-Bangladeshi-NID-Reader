@@ -68,6 +68,11 @@ class TestParseResponse:
         result = _parse_response(payload, "req123")
         assert result.spouseName == "Fatema Begum"
 
+    def test_blood_group_extracted(self):
+        payload = self._valid_payload(bloodGroup="O+")
+        result = _parse_response(payload, "req123")
+        assert result.bloodGroup == "O+"
+
     def test_non_nid_document_raises_image_validation_error(self):
         payload = json.dumps({"isFrontBangladeshNID": False, "isBackBangladeshNID": False, "name": None})
         with pytest.raises(ImageValidationError) as exc:

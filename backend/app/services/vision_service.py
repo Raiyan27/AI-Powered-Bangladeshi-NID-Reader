@@ -219,6 +219,7 @@ def _parse_response(raw_content: str, request_id: str) -> NIDData:
         "name", "fatherName", "motherName", "spouseName",
         "dateOfBirth", "nidNumber",
         "address", "presentAddress", "permanentAddress",
+        "bloodGroup",
     }
     filtered = {k: v for k, v in nid_dict.items() if k in known_fields}
     logger.info(f"[{request_id}] Parsed fields: {list(k for k, v in filtered.items() if v is not None)}")

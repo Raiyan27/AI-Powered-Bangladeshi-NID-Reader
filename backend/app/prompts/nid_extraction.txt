@@ -15,11 +15,11 @@ Analyse both images visually and extract the following fields:
   motherName           — Mother's full name in English. null if not present.
   spouseName           — Spouse's full name in English. null if not present. Do NOT confuse with father's or mother's name.
   dateOfBirth          — Date of birth strictly in YYYY-MM-DD format (e.g. 1998-01-15). null if not readable.
-  nidNumber            — The NID / ID number as a digit-only string (e.g. "1234567890123"). Remove all spaces, dashes, and non-digit characters. null if not found.
+  nidNumber            — The NID / ID number as a digit-only string (e.g. "1234567890"). Remove all spaces, dashes, and non-digit characters. null if not found.
   address              — The primary address found on the card, in English. This is MANDATORY if any address exists. If the card shows only one address, put it here.
   presentAddress       — Present / current address in English ONLY if the card explicitly labels it as present address, example: (বর্তমান ঠিকানা). null if the card does not explicitly distinguish present vs permanent address.
   permanentAddress     — Permanent address in English ONLY if the card explicitly labels it as permanent address, example: (স্থায়ী ঠিকানা). null if the card does not explicitly distinguish present vs permanent address.
-  bloodGroup           — Cardholder's blood group (e.g. "O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-"). null if not present on the card.
+  bloodGroup           — Cardholder's blood group (e.g. "O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-", "B (+ve)"). null ONLY if not present on the card.
 
 ---
 
@@ -29,7 +29,7 @@ ADDRESS EXTRACTION RULES
 - If the card shows TWO explicitly labelled addresses (i.e. present address: বর্তমান ঠিকানা and permanent address: স্থায়ী ঠিকানা): set `presentAddress` and `permanentAddress` accordingly. Also set `address` to the same value as `presentAddress` (primary).
 - Never set `presentAddress` or `permanentAddress` to a value that is not explicitly labelled as such on the card.
 - Translate Bengali location names to readable English. Preserve location names accurately.
-  - Example: "বাসা/হোল্ডিং: ২২ডি, রোড ১০৬, গুলশান" → "Dhaka, Bangladesh"
+  - Example: "বাসা: ১০, রোড: ৫, ধানমণ্ডি" → "House: 10, Road: 5, Dhanmondi"
 
 ---
 
@@ -39,7 +39,7 @@ Bangladesh NID cards exist in two main formats:
 
 Old format (laminated card):
   - Front: Name in Bengali and English, Father's name, Mother's name, Date of Birth, NID Number (10 digits)
-  - Back: Address information (usually one address field)
+  - Back: Address information (usually one address field), Blood Group (sometimes printed)
 
 New format (smart card, blue):
   - Front: Name in Bengali and English, Father's name, Mother's name, optional Spouse name, Date of Birth, NID Number (17 digits or 10 digits)
@@ -53,16 +53,16 @@ EXTRACTION RULES
 2. If isFrontBangladeshNID is false, set all front-side fields (name, fatherName, motherName, spouseName, dateOfBirth, nidNumber) to null.
 3. If isBackBangladeshNID is false, set all back-side fields (address, presentAddress, permanentAddress, bloodGroup) to null.
 4. Name fields: use the English transliteration printed on the card when available. If only Bengali is present, transliterate accurately.
-   - Bengali example: "মোঃ ফিরোজ আল আজাদ" → "Abdul Karim"
-   - Bengali example: "তাছলিমা আক্তার রেহেন" → "Amena Begum"
+   - Bengali example: "মোঃ রহিম" → "Md Rahim"
+   - Bengali example: "রহিমা বেগম" → "Rahima Begum"
 5. Do NOT mix up name fields — spouseName is a separate field from fatherName and motherName.
 6. dateOfBirth must always be YYYY-MM-DD. Convert from any format (e.g. "15 Jan 1998" → "1998-01-15").
 7. nidNumber: digits only — strip spaces, dashes, and any non-digit characters.
-8. bloodGroup: Inspect the BACK image (and front image) carefully. Smart cards print "Blood Group:" or "রক্তের গ্রুপ:" (e.g. "O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-"). Always extract it if visible. Set to null only if not present.
-8. If a field is partially visible, unreadable, obscured, or genuinely absent, set it to null. Never guess.
-9. Handle image quality issues gracefully: glare, blur, shadow, perspective distortion, and partial crops should not cause hallucinations.
-10. The card may be rotated — read the content regardless of orientation.
-11. Bengali digits (০১২৩৪৫৬৭৮৯) must be converted to ASCII digits (0123456789) in nidNumber and dateOfBirth.
+8. bloodGroup: Inspect BOTH front and back images carefully. Bangladesh NID cards (both Smart cards and laminated cards) print Blood Group (e.g. "Blood Group:", "রক্তের গ্রুপ:", "O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-", "B (+ve)", "O (+ve)"). You MUST extract the blood group value whenever printed anywhere on the card. Do NOT set to null if visible on either side.
+9. If a field is partially visible, unreadable, obscured, or genuinely absent, set it to null. Never guess.
+10. Handle image quality issues gracefully: glare, blur, shadow, perspective distortion, and partial crops should not cause hallucinations.
+11. The card may be rotated — read the content regardless of orientation.
+12. Bengali digits (০১২৩৪৫৬৭৮৯) must be converted to ASCII digits (0123456789) in nidNumber and dateOfBirth.
 
 ---
 
@@ -82,7 +82,7 @@ Return ONLY a single valid JSON object with exactly these keys:
   "address": "...",
   "presentAddress": "...",
   "permanentAddress": "...",
-  "bloodGroup": null
+  "bloodGroup": "..."
 }
 
 Do NOT include:

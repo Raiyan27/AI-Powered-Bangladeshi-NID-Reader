@@ -63,17 +63,12 @@ def validate_image(file_bytes: bytes, filename: str) -> None:
 
 
 def preprocess_image(file_bytes: bytes) -> bytes:
-    """Preprocess image for Vision AI extraction.
+    """Preprocess image safely for Vision AI extraction.
 
     Pipeline steps:
       1. EXIF auto-rotation (keeps card right-side up)
-      2. Intelligent downscaling (keeps image within API limits)
-      3. Deskewing (rotates card horizontally)
-      4. White balance correction (removes lighting color casts)
-      5. Brightness normalization (gamma correction)
-      6. CLAHE contrast enhancement (improves text contrast)
-      7. Sharpening (unsharp mask for text clarity)
-      8. Re-encoding as JPEG
+      2. Intelligent downscaling (keeps image within API limits preserving aspect ratio)
+      3. Re-encoding as JPEG with high quality
     """
     rotation = read_exif_rotation(file_bytes)
     img = bytes_to_numpy(file_bytes)
@@ -102,14 +97,7 @@ def preprocess_image(file_bytes: bytes) -> bytes:
         img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
         logger.info(f"Resized image from {w}x{h} to {new_w}x{new_h}")
 
-    # Step 3: Enhance image quality (deskew, white balance, brightness, contrast, sharpen)
-    img = _deskew(img)
-    img = _white_balance(img)
-    img = _normalize_brightness(img)
-    img = _enhance_contrast(img)
-    img = _sharpen(img)
-
-    # Step 4: Re-encode as JPEG for high visual fidelity
+    # Step 3: Re-encode as JPEG for high visual fidelity
     return numpy_to_jpeg(img, quality=settings.backend.jpeg_quality)
 
 

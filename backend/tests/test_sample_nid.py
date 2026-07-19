@@ -29,7 +29,8 @@ EXPECTED_DATA = {
     "nidNumber": "1234567890123",
     "address": "Dhaka, Bangladesh",
     "presentAddress": "Dhaka, Bangladesh",
-    "permanentAddress": "Dhaka, Bangladesh",
+    "permanentAddress": "Cumilla, Bangladesh",
+    "bloodGroup": "O+",
 }
 
 client = TestClient(app)
@@ -50,7 +51,7 @@ def _mock_vision_result() -> NIDData:
 
 
 class TestNIDSampleIntegration:
-    """Integration tests using the sample NID images."""
+    """Integration tests using sample NID images."""
 
     def test_sample_images_exist(self):
         assert NID_FRONT.exists(), f"NID_front.jpg not found at {NID_FRONT}"
@@ -89,7 +90,7 @@ class TestNIDSampleIntegration:
         )
         result = response.json()["data"]
         for field in ["name", "fatherName", "motherName", "spouseName", "dateOfBirth",
-                      "nidNumber", "address", "presentAddress", "permanentAddress"]:
+                      "nidNumber", "address", "presentAddress", "permanentAddress", "bloodGroup"]:
             assert field in result, f"Missing field: {field}"
 
     @patch("app.services.extraction_service.extract_with_vision", new_callable=AsyncMock)
@@ -154,3 +155,4 @@ class TestNIDSampleIntegration:
         )
         assert response.status_code == 200
         assert response.json()["data"]["nidNumber"] == "1234567890123"
+

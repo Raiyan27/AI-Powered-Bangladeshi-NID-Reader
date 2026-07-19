@@ -39,13 +39,13 @@ class TestNormalizeDate:
 
 class TestNormalizeNidNumber:
     def test_clean_10_digit(self):
-        assert normalize_nid_number("1234567890123") == "1234567890123"
+        assert normalize_nid_number("1234567890") == "1234567890"
 
     def test_strips_spaces(self):
-        assert normalize_nid_number("123 456 7890") == "1234567890123"
+        assert normalize_nid_number("123 456 7890") == "1234567890"
 
     def test_strips_dashes(self):
-        assert normalize_nid_number("1234-567-890") == "1234567890123"
+        assert normalize_nid_number("1234-567-890") == "1234567890"
 
     def test_none_returns_none(self):
         assert normalize_nid_number(None) is None
@@ -54,8 +54,8 @@ class TestNormalizeNidNumber:
         assert normalize_nid_number("") is None
 
     def test_bengali_digits_normalized(self):
-        assert normalize_nid_number("১২৩৪৫৬৭৮৯০১২৩") == "1234567890123"
-        assert normalize_nid_number("১২৩৪-৫৬৭-৮৯০") == "1234567890123"
+        assert normalize_nid_number("১২৩৪৫৬৭৮৯০") == "1234567890"
+        assert normalize_nid_number("১২৩৪-৫৬৭-৮৯০") == "1234567890"
 
 
 class TestNormalizeName:
@@ -63,10 +63,10 @@ class TestNormalizeName:
         assert normalize_name("  Md Rahim  ") == "Md Rahim"
 
     def test_collapses_internal_spaces(self):
-        assert normalize_name("Rahim  Al   Rahim") == "Md Rahim"
+        assert normalize_name("Md  Rahim   Khan") == "Md Rahim Khan"
 
     def test_uppercase_converted_to_title(self):
-        assert normalize_name("ABDULLAH AL RAIYAN") == "Md Rahim"
+        assert normalize_name("MD RAHIM KHAN") == "Md Rahim Khan"
 
     def test_none_returns_none(self):
         assert normalize_name(None) is None
@@ -106,6 +106,13 @@ class TestNormalizeBloodGroup:
         assert normalize_blood_group("AB +ve") == "AB+"
         assert normalize_blood_group("A POSITIVE") == "A+"
         assert normalize_blood_group("O-ve") == "O-"
+
+    def test_prefixed_and_bengali_notations(self):
+        assert normalize_blood_group("Blood Group: B+") == "B+"
+        assert normalize_blood_group("রক্তের গ্রুপ: O+") == "O+"
+        assert normalize_blood_group("বি+") == "B+"
+        assert normalize_blood_group("ও (+ve)") == "O+"
+        assert normalize_blood_group("এবি পজিটিভ") == "AB+"
 
     def test_none_and_empty(self):
         assert normalize_blood_group(None) is None
