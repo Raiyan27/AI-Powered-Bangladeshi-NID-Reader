@@ -8,16 +8,18 @@ interface BackendHealthGuardProps {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_SECONDS = 5;
 const HEALTH_TIMEOUT_MS = 8000;
 
 export default function BackendHealthGuard({ children }: BackendHealthGuardProps) {
   const [isProd, setIsProd] = useState<boolean>(false);
   const [status, setStatus] = useState<"init" | "checking" | "sleeping" | "live">("init");
   const [retryCount, setRetryCount] = useState<number>(0);
+  const [countdown, setCountdown] = useState<number>(POLL_INTERVAL_SECONDS);
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
 
   const isCheckingRef = useRef<boolean>(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const checkHealthRef = useRef<() => Promise<void>>(async () => {});
 
   // Detect production mode safely on client mount
   useEffect(() => {
@@ -53,10 +55,6 @@ export default function BackendHealthGuard({ children }: BackendHealthGuardProps
         if (data && data.status === "ok") {
           setStatus("live");
           isCheckingRef.current = false;
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
-          }
           return;
         }
       }
@@ -73,34 +71,40 @@ export default function BackendHealthGuard({ children }: BackendHealthGuardProps
     }
   }, []);
 
+  // Keep ref updated to avoid stale closures in setInterval
+  useEffect(() => {
+    checkHealthRef.current = checkHealth;
+  }, [checkHealth]);
+
+  // Initial check on production mount
   useEffect(() => {
     if (!isProd) return;
-
-    // Run initial health check immediately
     checkHealth();
-
-    // Setup polling every 5 seconds until server becomes live
-    timerRef.current = setInterval(() => {
-      checkHealth();
-    }, POLL_INTERVAL_MS);
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    };
   }, [isProd, checkHealth]);
+
+  // 1-second ticker when server is sleeping
+  useEffect(() => {
+    if (!isProd || status !== "sleeping") return;
+
+    const ticker = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+      setCountdown((prevCount) => {
+        if (prevCount <= 1) {
+          // Trigger next health check
+          checkHealthRef.current();
+          return POLL_INTERVAL_SECONDS;
+        }
+        return prevCount - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(ticker);
+  }, [isProd, status]);
 
   const handleManualRetry = () => {
     setStatus("checking");
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
+    setCountdown(POLL_INTERVAL_SECONDS);
     checkHealth();
-    timerRef.current = setInterval(() => {
-      checkHealth();
-    }, POLL_INTERVAL_MS);
   };
 
   // 1. Non-prod mode OR Backend is verified Live: Render children with optional status pill in prod
@@ -135,6 +139,9 @@ export default function BackendHealthGuard({ children }: BackendHealthGuardProps
       </div>
     );
   }
+
+  // Calculate dynamic progress bar percentage (0% to 100% per 5-second interval)
+  const progressPercent = Math.min(100, Math.max(0, ((POLL_INTERVAL_SECONDS - countdown) / POLL_INTERVAL_SECONDS) * 100));
 
   // 3. Sleeping / Waking Up full-page UI screen in Prod mode
   return (
@@ -177,18 +184,28 @@ export default function BackendHealthGuard({ children }: BackendHealthGuardProps
           </p>
         </div>
 
-        {/* Auto-retry Polling Box */}
-        <div className="bg-amber-50/60 rounded-lg p-3 border border-amber-100 space-y-2">
-          <div className="flex items-center justify-between text-xs text-amber-800">
-            <span className="flex items-center gap-1.5 font-medium">
+        {/* Countdown & Progress Bar Box */}
+        <div className="bg-amber-50/60 rounded-lg p-4 border border-amber-100 space-y-3">
+          <div className="flex items-center justify-between text-xs text-amber-900 font-medium">
+            <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              Retrying health check every 5s…
+              Retrying in <span className="font-bold text-amber-800 font-mono text-sm">{countdown}s</span>
             </span>
-            <span className="font-mono text-amber-600 font-semibold">Check #{retryCount}</span>
+            <span className="text-amber-700 font-mono">Attempt #{retryCount}</span>
           </div>
 
-          <div className="w-full bg-amber-200/60 h-1.5 rounded-full overflow-hidden">
-            <div className="bg-amber-500 h-full rounded-full animate-pulse w-full" />
+          {/* Smooth Dynamic Progress Bar */}
+          <div className="w-full bg-amber-200/70 h-2 rounded-full overflow-hidden">
+            <div
+              className="bg-amber-500 h-full rounded-full transition-all duration-300 ease-linear"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          {/* Waiting Time Display */}
+          <div className="flex items-center justify-between text-[11px] text-amber-700 font-mono pt-0.5">
+            <span>Total Elapsed Wait:</span>
+            <span className="font-bold text-amber-900">{elapsedSeconds}s</span>
           </div>
         </div>
 
