@@ -10,12 +10,12 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const CYCLE_MS = 5000;
 const TICK_MS = 100;
-const HEALTH_TIMEOUT_MS = 8000;
+const HEALTH_TIMEOUT_MS = 4500;
 
 export default function BackendHealthGuard({ children }: BackendHealthGuardProps) {
   const [isProd, setIsProd] = useState<boolean>(false);
   const [status, setStatus] = useState<"init" | "checking" | "sleeping" | "live">("init");
-  const [retryCount, setRetryCount] = useState<number>(0);
+  const [retryCount, setRetryCount] = useState<number>(1);
   const [cycleMs, setCycleMs] = useState<number>(0);
   const [totalMs, setTotalMs] = useState<number>(0);
 
@@ -68,7 +68,6 @@ export default function BackendHealthGuard({ children }: BackendHealthGuardProps
     } finally {
       clearTimeout(timeoutId);
       isCheckingRef.current = false;
-      setRetryCount((prev) => prev + 1);
     }
   }, []);
 
@@ -92,7 +91,9 @@ export default function BackendHealthGuard({ children }: BackendHealthGuardProps
       setCycleMs((prevCycle) => {
         const nextCycle = prevCycle + TICK_MS;
         if (nextCycle >= CYCLE_MS) {
-          // Trigger health check at the end of each 5s cycle
+          // Increment attempt count immediately when the 5s counter restarts
+          setRetryCount((prev) => prev + 1);
+          // Trigger health check at the start of each new 5s cycle
           checkHealthRef.current();
           return 0;
         }
@@ -104,6 +105,7 @@ export default function BackendHealthGuard({ children }: BackendHealthGuardProps
   }, [isProd, status]);
 
   const handleManualRetry = () => {
+    setRetryCount((prev) => prev + 1);
     setStatus("checking");
     setCycleMs(0);
     checkHealth();
