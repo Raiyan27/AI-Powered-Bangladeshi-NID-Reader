@@ -98,7 +98,7 @@ Vision LLMs (e.g., Gemini 3.1 Flash Lite) can read Bengali and English text dire
 
 ### Prerequisites
 
-- Python 3.12+
+- Python 3.11-3.12
 - Node.js 20+
 - An [OpenRouter](https://openrouter.ai/) API key
 
