@@ -12,7 +12,7 @@ Users upload the **front** and **back** images of an NID card (or a single combi
 
 1. **Validates** the images (format, size, dimensions)
 2. **Preprocesses** them using OpenCV + Pillow (EXIF rotation, deskew, white balance, brightness normalisation, CLAHE contrast enhancement, sharpening, denoising)
-3. **Analyses** both images with a Vision LLM via OpenRouter (e.g., Gemini 2.5 Flash)
+3. **Analyses** both images with a Vision LLM via OpenRouter (e.g., Gemini 3.1 Flash Lite)
 4. **Normalises** field values (date format, name casing, NID digit cleanup)
 5. **Returns** a structured JSON response
 
@@ -50,7 +50,7 @@ FastAPI Backend
 
 **Why Vision AI only?**
 
-Vision LLMs (e.g., Gemini 2.5 Flash) can read Bengali and English text directly from images with high accuracy. A separate OCR layer was previously used to provide text hints but added significant complexity, model download overhead (~1 GB for EasyOCR), and slow cold-start times without a reliable accuracy improvement over the Vision model alone.
+Vision LLMs (e.g., Gemini 3.1 Flash Lite) can read Bengali and English text directly from images with high accuracy. A separate OCR layer was previously used to provide text hints but added significant complexity, model download overhead (~1 GB for EasyOCR), and slow cold-start times without a reliable accuracy improvement over the Vision model alone.
 
 ## Project Structure
 
@@ -255,36 +255,13 @@ Expected output is in `samples/NID.json`.
 
 ## AI Usage Documentation
 
-### AI Tools Used During Development
+Detailed documentation on AI tool usage, prompt engineering, code verification methodologies, and manual modifications can be found in [**`AI_USAGE.md`**](AI_USAGE.md).
 
-- **Antigravity (Google DeepMind)** — Used for code generation, architecture planning, and iterative refinement
-- **OpenRouter / Gemini 2.5 Flash** — Used as the Vision LLM for NID information extraction at runtime
+### Summary of AI Tools & Practices
 
-### Prompt Engineering
+- **AI Tools Used**: [Antigravity AI Agent (Google DeepMind)](AI_USAGE.md#1-ai-tools-used) (powered by Gemini 3.5 Flash / Gemini Pro), Google Gemini 3.1 Flash via OpenRouter (runtime Vision LLM), Claude 3.5 Sonnet / ChatGPT, and GitHub Copilot / Cursor.
+- **Example Prompts**: Full architectural, prompt engineering, frontend, and testing prompts are documented in [AI_USAGE.md Prompt Examples](AI_USAGE.md#2-example-prompts).
+- **Verification Methodology**: Verified via automated `pytest` test suites, empirical ground-truth testing with test samples (`samples/NID_front.jpg`, `samples/NID_back.jpg`), type checking, and Docker environment validation. See [AI_USAGE.md Verification](AI_USAGE.md#3-verification-of-ai-generated-code).
+- **Manual Modifications & Rationale**: Replaced heavy OCR dependencies with direct Vision LLM parsing, added exponential backoff retries, supported single-image front+back uploads, and added ISO date/digit normalisers. See [AI_USAGE.md Manual Modifications](AI_USAGE.md#4-modified-ai-code--rationale).
 
-The extraction prompt is in [`backend/app/prompts/nid_extraction.txt`](backend/app/prompts/nid_extraction.txt).
-
-Key prompt design decisions:
-- Defines the AI's role as a precise document analysis specialist
-- Covers both old (laminated) and new (smart card) Bangladesh NID formats explicitly
-- Contains explicit Bengali digit conversion rules (০১২৩→0123)
-- Requires strict ISO date format (`YYYY-MM-DD`) for deterministic post-processing
-- Instructs the model to set fields to `null` when uncertain (never guess)
-- Requires JSON-only output (no markdown, no explanations)
-- Handles edge cases: rotated images, glare, blur, partial crops, perspective distortion
-
-### Verification
-
-All generated code was verified by:
-1. Running the full test suite (`pytest tests/ -v`)
-2. Manual testing with `samples/NID_front.jpg` and `samples/NID_back.jpg`
-3. Comparing output against `samples/NID.json` (ground truth)
-4. Reviewing each service file for correctness, type safety, and edge cases
-
-### Manual Modifications
-
-- Migrated from EasyOCR + merge pipeline to Vision AI-only architecture
-- Added retry with exponential backoff for transient API failures
-- Added per-request UUID tracing for debugging
-- Enhanced preprocessing with white balance, gamma normalisation, and sharpening
-- Prompt redesigned from scratch to remove OCR text dependencies
+For complete prompt texts, detailed comparison tables, and full verification steps, refer to [**`AI_USAGE.md`**](AI_USAGE.md).
